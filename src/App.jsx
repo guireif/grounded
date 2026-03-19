@@ -698,12 +698,22 @@ export default function App() {
 
   useEffect(() => {
     if (q.trim().length < 2) { setSugg([]); return; }
-    const u = q.toUpperCase();
-    setSugg(Object.keys(FLIGHTS).filter(k =>
-      k.replace(" ", "").includes(u.replace(" ", "")) ||
-      FLIGHTS[k].airline.toUpperCase().includes(u) ||
-      FLIGHTS[k].route.includes(u)
-    ).slice(0, 5));
+    const timer = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.results) {
+            setSugg(data.results.map(r => ({
+              key:    r.flight,
+              label:  r.flight,
+              route:  r.route,
+              airline:r.airline,
+            })));
+          }
+        })
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(timer);
   }, [q]);
 
   // Prefetch live data when flight is selected and cache it
@@ -748,12 +758,13 @@ export default function App() {
             />
             {sugg.length > 0 && (
               <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, background:"#fff", border:"1px solid #e8e6de", borderRadius:10, overflow:"hidden", zIndex:30, boxShadow:"0 4px 16px rgba(0,0,0,0.08)" }}>
-                {sugg.map(k => (
-                  <div key={k} onClick={() => pick(k)} style={{ padding:"9px 14px", cursor:"pointer", display:"flex", justifyContent:"space-between", fontSize:12, borderBottom:"1px solid #f8f7f4" }}
+                {sugg.map(s => (
+                  <div key={s.key} onClick={() => pick(s.key)} 
+                    style={{ padding:"9px 14px", cursor:"pointer", display:"flex", justifyContent:"space-between", fontSize:12, borderBottom:"1px solid #f8f7f4" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#f8f7f4"}
                     onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
-                    <span style={{ fontFamily:"monospace", color:"#c2820a", fontWeight:600 }}>{k}</span>
-                    <span style={{ color:"#94a3b8" }}>{FLIGHTS[k].route}</span>
+                    <span style={{ fontFamily:"monospace", color:"#c2820a", fontWeight:600 }}>{s.label}</span>
+                    <span style={{ color:"#94a3b8" }}>{s.route}</span>
                   </div>
                 ))}
               </div>
