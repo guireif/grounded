@@ -5,7 +5,6 @@ import {
 } from "recharts";
 
 // ─── AIRPORT LAT/LNG DATABASE ─────────────────────────────────────────────────
-// Used to plot airports on the world map via Mercator projection
 
 const AIRPORTS = {
   JFK:{ lat:40.64,  lng:-73.78 }, LAX:{ lat:33.94,  lng:-118.41 },
@@ -33,22 +32,10 @@ const AIRPORTS = {
   CUN:{ lat:21.04,  lng:-86.87 }, YYZ:{ lat:43.68,  lng:-79.63  },
   YVR:{ lat:49.19,  lng:-123.18}, NBO:{ lat:-1.32,  lng:36.93   },
   JNB:{ lat:-26.14, lng:28.24  }, CAI:{ lat:30.12,  lng:31.41   },
-  CPT:{ lat:-33.97, lng:18.60  }, ADD:{ lat:8.98,   lng:38.80   },
   BOM:{ lat:19.09,  lng:72.87  }, DEL:{ lat:28.56,  lng:77.10   },
   BKK:{ lat:13.69,  lng:100.75 }, KUL:{ lat:2.74,   lng:101.71  },
   IST:{ lat:40.98,  lng:28.82  }, ATH:{ lat:37.94,  lng:23.95   },
-  VIE:{ lat:48.11,  lng:16.57  }, BRU:{ lat:50.90,  lng:4.48    },
-  CPH:{ lat:55.62,  lng:12.66  }, OSL:{ lat:60.20,  lng:11.08   },
-  ARN:{ lat:59.65,  lng:17.92  }, HEL:{ lat:60.32,  lng:24.96   },
   LIS:{ lat:38.77,  lng:-9.13  }, DUB:{ lat:53.43,  lng:-6.24   },
-  MAN:{ lat:53.35,  lng:-2.27  }, BHX:{ lat:52.45,  lng:-1.75   },
-  GLA:{ lat:55.87,  lng:-4.43  }, EDI:{ lat:55.95,  lng:-3.37   },
-  MXP:{ lat:45.63,  lng:8.73   }, LIN:{ lat:45.45,  lng:9.28    },
-  TXL:{ lat:52.56,  lng:13.29  }, HAM:{ lat:53.63,  lng:10.00   },
-  PMI:{ lat:39.55,  lng:2.74   }, AGP:{ lat:36.67,  lng:-4.50   },
-  VLC:{ lat:39.49,  lng:-0.48  }, SVQ:{ lat:37.42,  lng:-5.89   },
-  ALC:{ lat:38.28,  lng:-0.56  }, TFS:{ lat:28.04,  lng:-16.57  },
-  LPA:{ lat:27.93,  lng:-15.39 }, ACE:{ lat:29.00,  lng:-13.60  },
 };
 
 // ─── STATIC FLIGHT METADATA ───────────────────────────────────────────────────
@@ -64,7 +51,7 @@ const FLIGHTS = {
   "NK 1":   { route:"FLL → ORD", from:"FLL", to:"ORD", airline:"Spirit Airlines",   aircraft:"A320", fromCity:"Fort Lauderdale", toCity:"Chicago" },
 };
 
-// ─── SIMULATED ALTERNATIVES ───────────────────────────────────────────────────
+// ─── ALTERNATIVES ─────────────────────────────────────────────────────────────
 
 const ALTS = {
   "AA 100": [
@@ -236,195 +223,149 @@ function Spinner() {
 }
 
 // ─── WORLD MAP ────────────────────────────────────────────────────────────────
-// Uses equirectangular projection: x = (lng+180)/360 * W, y = (90-lat)/180 * H
 
 const MAP_W = 960;
-const MAP_H = 480;
+const MAP_H = 500;
 
+// Equirectangular projection
 function project(lat, lng) {
   const x = ((lng + 180) / 360) * MAP_W;
   const y = ((90 - lat) / 180) * MAP_H;
-  return { x, y };
+  return [x, y];
 }
 
-// Interpolate a point along a great-circle path at progress t
-// For short distances equirectangular is fine; we add a slight arc
-function interpolate(fromLat, fromLng, toLat, toLng, t) {
-  const lat = fromLat + (toLat - fromLat) * t;
-  const lng = fromLng + (toLng - fromLng) * t;
-  // Arc lift — pushes plane slightly north of straight line
-  const arcLift = Math.sin(Math.PI * t) * 8;
-  return { lat: lat + arcLift, lng };
+// Convert GeoJSON geometry to SVG path string
+function geoToPath(geometry) {
+  if (!geometry) return "";
+  const ringToD = (ring) =>
+    ring.map(([lng, lat], i) => {
+      const [x, y] = project(lat, lng);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join("") + "Z";
+
+  if (geometry.type === "Polygon") {
+    return geometry.coordinates.map(ringToD).join(" ");
+  } else if (geometry.type === "MultiPolygon") {
+    return geometry.coordinates.flatMap(poly => poly.map(ringToD)).join(" ");
+  }
+  return "";
 }
 
-// Simplified world land masses as SVG path (Robinson-ish, equirectangular)
-const WORLD_PATH = `
-M 136,60 L 152,55 L 168,52 L 180,48 L 192,46 L 200,44 L 208,45 L 216,48
-L 224,52 L 228,58 L 232,65 L 228,72 L 224,78 L 216,82 L 208,84 L 200,82
-L 192,78 L 184,74 L 176,70 L 168,65 L 158,62 L 148,62 L 140,63 Z
+// Build arc path between two SVG points
+function arcPath(x1, y1, x2, y2) {
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.12;
+  return `M${x1},${y1} Q${mx},${my} ${x2},${y2}`;
+}
 
-M 244,52 L 260,48 L 280,44 L 296,42 L 316,40 L 336,38 L 352,36 L 368,35
-L 380,34 L 392,36 L 404,40 L 416,46 L 424,52 L 428,58 L 424,65 L 416,70
-L 404,74 L 388,76 L 372,78 L 356,80 L 340,82 L 324,82 L 308,80 L 292,76
-L 276,72 L 260,68 L 248,63 L 242,58 Z
-
-M 440,44 L 456,40 L 472,38 L 488,36 L 504,35 L 520,34 L 536,34 L 552,35
-L 568,37 L 580,40 L 592,44 L 600,50 L 604,57 L 600,64 L 592,70 L 580,75
-L 564,79 L 548,82 L 532,84 L 516,84 L 500,82 L 484,78 L 468,73 L 454,67
-L 444,60 L 438,52 Z
-
-M 612,38 L 628,34 L 644,32 L 660,31 L 676,32 L 692,34 L 704,38 L 712,44
-L 716,51 L 712,58 L 704,64 L 692,68 L 676,71 L 660,72 L 644,71 L 628,68
-L 616,63 L 610,56 L 608,49 Z
-
-M 720,44 L 736,40 L 756,37 L 776,35 L 796,34 L 812,35 L 824,38 L 832,43
-L 836,50 L 832,57 L 824,63 L 812,67 L 796,70 L 780,71 L 764,70 L 748,67
-L 734,62 L 724,56 L 718,49 Z
-
-M 180,140 L 196,136 L 212,133 L 228,131 L 244,130 L 260,131 L 272,134
-L 280,139 L 284,146 L 280,153 L 272,158 L 260,162 L 244,164 L 228,164
-L 212,162 L 198,158 L 188,152 L 182,146 Z
-
-M 196,200 L 208,195 L 220,192 L 232,190 L 244,191 L 252,194 L 256,200
-L 252,207 L 244,212 L 232,215 L 220,215 L 208,213 L 200,208 Z
-
-M 132,260 L 148,256 L 160,254 L 172,256 L 180,262 L 176,270 L 164,276
-L 152,278 L 140,276 L 132,270 L 128,264 Z
-
-M 396,96 L 416,88 L 436,82 L 452,78 L 464,76 L 476,76 L 488,78 L 500,82
-L 508,88 L 512,95 L 508,103 L 500,110 L 488,115 L 472,118 L 456,120
-L 440,120 L 424,117 L 410,112 L 400,105 Z
-
-M 440,136 L 456,130 L 472,126 L 488,124 L 504,124 L 516,127 L 524,133
-L 520,141 L 508,148 L 492,153 L 476,156 L 460,156 L 446,152 L 436,145 Z
-
-M 480,176 L 492,172 L 504,170 L 516,172 L 524,178 L 520,186 L 508,192
-L 492,195 L 478,192 L 470,186 L 472,179 Z
-
-M 392,176 L 400,171 L 408,168 L 418,168 L 424,173 L 420,180 L 410,185
-L 398,186 L 390,181 Z
-
-M 500,240 L 512,234 L 524,231 L 536,232 L 544,238 L 540,247 L 528,254
-L 514,257 L 500,254 L 492,247 Z
-
-M 528,284 L 540,279 L 552,277 L 560,280 L 560,288 L 552,295 L 540,298
-L 528,295 L 520,289 Z
-
-M 552,320 L 560,316 L 568,315 L 574,319 L 572,326 L 562,330 L 552,327 Z
-
-M 568,356 L 576,352 L 584,352 L 588,358 L 584,364 L 574,366 L 566,362 Z
-
-M 600,100 L 616,94 L 632,90 L 648,87 L 664,86 L 676,87 L 688,91 L 696,97
-L 700,105 L 696,113 L 684,120 L 668,125 L 652,127 L 636,126 L 620,122
-L 606,115 L 598,107 Z
-
-M 680,136 L 696,130 L 712,127 L 728,128 L 740,132 L 748,139 L 744,148
-L 732,155 L 716,159 L 700,159 L 686,154 L 676,147 Z
-
-M 724,168 L 736,163 L 748,161 L 760,163 L 768,170 L 764,179 L 752,185
-L 736,188 L 722,184 L 714,176 Z
-
-M 748,196 L 760,191 L 772,190 L 780,195 L 776,204 L 762,209 L 748,205 Z
-
-M 780,220 L 788,215 L 796,215 L 800,222 L 796,230 L 784,232 L 776,226 Z
-
-M 796,244 L 804,240 L 812,241 L 816,248 L 810,255 L 800,255 L 792,250 Z
-
-M 812,264 L 820,261 L 828,263 L 828,271 L 820,275 L 812,272 Z
-
-M 676,188 L 692,183 L 708,182 L 716,187 L 712,196 L 700,202 L 684,201
-L 672,195 Z
-
-M 640,164 L 656,158 L 668,157 L 676,163 L 672,172 L 656,177 L 640,173 Z
-
-M 624,192 L 636,187 L 648,188 L 652,196 L 644,203 L 628,203 L 618,196 Z
-`;
+// Interpolate position along arc at progress t
+function interpArc(lat1, lng1, lat2, lng2, t) {
+  const lat = lat1 + (lat2 - lat1) * t;
+  const lng = lng1 + (lng2 - lng1) * t;
+  const lift = Math.sin(Math.PI * t) * 6; // slight arc
+  return [lat + lift, lng];
+}
 
 function FlightMap({ fromIata, toIata, progress, planeLat, planeLng, apiStatus }) {
-  const fromAp = AIRPORTS[fromIata];
-  const toAp   = AIRPORTS[toIata];
+  const [countryPaths, setCountryPaths] = useState([]);
+  const [mapLoaded, setMapLoaded]       = useState(false);
 
-  // Fallback: if airport not in our DB, use center of map
-  const fromPos = fromAp ? project(fromAp.lat, fromAp.lng) : { x: MAP_W * 0.3, y: MAP_H * 0.4 };
-  const toPos   = toAp   ? project(toAp.lat,   toAp.lng)   : { x: MAP_W * 0.7, y: MAP_H * 0.4 };
+  // Load real world country data from CDN
+  useEffect(() => {
+    Promise.all([
+      import("https://cdn.jsdelivr.net/npm/topojson-client@3/+esm"),
+      fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(r => r.json()),
+    ]).then(([topojson, world]) => {
+      const countries = topojson.feature(world, world.objects.countries);
+      const paths = countries.features.map(f => ({
+        id:   f.id,
+        d:    geoToPath(f.geometry),
+      })).filter(p => p.d);
+      setCountryPaths(paths);
+      setMapLoaded(true);
+    }).catch(() => setMapLoaded(true)); // fail silently, still show flight path
+  }, []);
 
-  // Plane position: use real lat/lng from OpenSky if available, else interpolate
-  let planePos = null;
+  const fromAp  = AIRPORTS[fromIata];
+  const toAp    = AIRPORTS[toIata];
+  const fromXY  = fromAp ? project(fromAp.lat, fromAp.lng) : [MAP_W * 0.3, MAP_H * 0.45];
+  const toXY    = toAp   ? project(toAp.lat,   toAp.lng)   : [MAP_W * 0.7, MAP_H * 0.45];
+
+  // Plane position from OpenSky or interpolated
+  let planeXY = null;
   if (planeLat && planeLng) {
-    planePos = project(planeLat, planeLng);
+    planeXY = project(planeLat, planeLng);
   } else if (progress > 0 && progress < 1 && fromAp && toAp) {
-    const interp = interpolate(fromAp.lat, fromAp.lng, toAp.lat, toAp.lng, progress);
-    planePos = project(interp.lat, interp.lng);
+    const [ilat, ilng] = interpArc(fromAp.lat, fromAp.lng, toAp.lat, toAp.lng, progress);
+    planeXY = project(ilat, ilng);
   }
 
-  const fly        = progress > 0 && progress < 1;
+  const fly         = progress > 0 && progress < 1;
   const isCancelled = apiStatus === "cancelled";
   const isLanded    = apiStatus === "landed";
 
-  // Build arc path for the route line
-  const buildArcPath = (from, to) => {
-    const mx = (from.x + to.x) / 2;
-    const my = (from.y + to.y) / 2 - Math.abs(to.x - from.x) * 0.15;
-    return `M ${from.x} ${from.y} Q ${mx} ${my} ${to.x} ${to.y}`;
-  };
-
-  const arcPath = buildArcPath(fromPos, toPos);
-
-  // Traveled path up to plane position
-  const traveledPath = planePos && fly
-    ? buildArcPath(fromPos, planePos)
+  const routeArc    = arcPath(fromXY[0], fromXY[1], toXY[0], toXY[1]);
+  const traveledArc = planeXY && fly
+    ? arcPath(fromXY[0], fromXY[1], planeXY[0], planeXY[1])
     : null;
 
   return (
-    <div style={{ background:"#f0f4ff", borderRadius:12, overflow:"hidden", border:"1px solid #e8e6de" }}>
+    <div style={{ background:"#e8f0f8", borderRadius:12, overflow:"hidden", border:"1px solid #dce8f0" }}>
       <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} width="100%" style={{ display:"block" }}>
-        {/* Ocean background */}
-        <rect width={MAP_W} height={MAP_H} fill="#dce8f5"/>
 
-        {/* Land masses */}
-        <path d={WORLD_PATH} fill="#e8eef8" stroke="#c8d8ec" strokeWidth="0.8"/>
+        {/* Ocean */}
+        <rect width={MAP_W} height={MAP_H} fill="#dceaf5"/>
 
-        {/* Grid lines */}
+        {/* Country fills */}
+        {countryPaths.map(c => (
+          <path key={c.id} d={c.d} fill="#edf2f9" stroke="#c8d8ec" strokeWidth="0.5"/>
+        ))}
+
+        {/* Loading skeleton */}
+        {!mapLoaded && (
+          <text x={MAP_W/2} y={MAP_H/2} textAnchor="middle" fill="#b0c8e0" fontSize="14">Loading map...</text>
+        )}
+
+        {/* Latitude lines */}
         {[-60,-30,0,30,60].map(lat => {
-          const { y } = project(lat, 0);
-          return <line key={lat} x1={0} y1={y} x2={MAP_W} y2={y} stroke="#d4e0f0" strokeWidth="0.5"/>;
-        })}
-        {[-150,-120,-90,-60,-30,0,30,60,90,120,150].map(lng => {
-          const { x } = project(0, lng);
-          return <line key={lng} x1={x} y1={0} x2={x} y2={MAP_H} stroke="#d4e0f0" strokeWidth="0.5"/>;
+          const [,y] = project(lat, 0);
+          return <line key={lat} x1={0} y1={y} x2={MAP_W} y2={y} stroke="#d0e0ee" strokeWidth="0.5" strokeDasharray="4,4"/>;
         })}
 
         {/* Route arc (dashed) */}
-        <path d={arcPath} fill="none" stroke="#b0c8e8" strokeWidth="1.5" strokeDasharray="6,4"/>
+        <path d={routeArc} fill="none" stroke="#a8c4e0" strokeWidth="1.5" strokeDasharray="6,4"/>
 
-        {/* Traveled portion */}
-        {traveledPath && <path d={traveledPath} fill="none" stroke="#f59e0b" strokeWidth="2.5"/>}
+        {/* Traveled portion (solid amber) */}
+        {traveledArc && <path d={traveledArc} fill="none" stroke="#f59e0b" strokeWidth="2.5"/>}
 
         {/* Airport markers */}
-        {[{ iata:fromIata, pos:fromPos, col:"#f59e0b" }, { iata:toIata, pos:toPos, col:"#16a34a" }].map(({ iata, pos, col }) => (
+        {[{ iata:fromIata, xy:fromXY, col:"#f59e0b" }, { iata:toIata, xy:toXY, col:"#16a34a" }].map(({ iata, xy, col }) => (
           <g key={iata}>
-            <circle cx={pos.x} cy={pos.y} r="7" fill="#fff" stroke={col} strokeWidth="2"/>
-            <circle cx={pos.x} cy={pos.y} r="3" fill={col}/>
-            <text x={pos.x} y={pos.y - 14} textAnchor="middle" fill={col} fontSize="11" fontFamily="monospace" fontWeight="bold">{iata}</text>
+            <circle cx={xy[0]} cy={xy[1]} r="7" fill="#fff" stroke={col} strokeWidth="2.5"/>
+            <circle cx={xy[0]} cy={xy[1]} r="3" fill={col}/>
+            <text x={xy[0]} y={xy[1] - 14} textAnchor="middle" fill={col} fontSize="11" fontFamily="monospace" fontWeight="bold"
+              style={{ textShadow:"0 1px 3px rgba(255,255,255,0.8)" }}>
+              {iata}
+            </text>
           </g>
         ))}
 
-        {/* Plane icon */}
-        {fly && planePos && (
-          <g transform={`translate(${planePos.x},${planePos.y})`}>
-            <circle r="13" fill="#fff" stroke="#f59e0b" strokeWidth="2"/>
-            <circle r="13" fill="#fef3c7" opacity="0.5">
-              <animate attributeName="r" values="13;19;13" dur="2s" repeatCount="indefinite"/>
+        {/* Plane in flight */}
+        {fly && planeXY && (
+          <g transform={`translate(${planeXY[0]},${planeXY[1]})`}>
+            <circle r="14" fill="#fff" stroke="#f59e0b" strokeWidth="2"/>
+            <circle r="14" fill="#fef3c7" opacity="0.4">
+              <animate attributeName="r" values="14;20;14" dur="2s" repeatCount="indefinite"/>
             </circle>
-            <text textAnchor="middle" dominantBaseline="middle" fontSize="12">✈</text>
+            <text textAnchor="middle" dominantBaseline="middle" fontSize="13">✈</text>
           </g>
         )}
 
         {/* Landed */}
         {isLanded && (
-          <g transform={`translate(${toPos.x},${toPos.y})`}>
-            <circle r="13" fill="#dcfce7">
-              <animate attributeName="r" values="13;20;13" dur="2s" repeatCount="indefinite"/>
+          <g transform={`translate(${toXY[0]},${toXY[1]})`}>
+            <circle r="14" fill="#dcfce7">
+              <animate attributeName="r" values="14;20;14" dur="2s" repeatCount="indefinite"/>
             </circle>
             <text textAnchor="middle" dominantBaseline="middle" fontSize="14" y="-1">🛬</text>
           </g>
@@ -432,25 +373,25 @@ function FlightMap({ fromIata, toIata, progress, planeLat, planeLng, apiStatus }
 
         {/* Parked / scheduled */}
         {!fly && !isLanded && !isCancelled && (
-          <g transform={`translate(${fromPos.x},${fromPos.y})`}>
+          <g transform={`translate(${fromXY[0]},${fromXY[1]})`}>
             <circle r="11" fill="#fef3c7" stroke="#f59e0b" strokeWidth="1.5"/>
-            <text textAnchor="middle" dominantBaseline="middle" fontSize="11" y="-1">✈</text>
+            <text textAnchor="middle" dominantBaseline="middle" fontSize="11">✈</text>
           </g>
         )}
 
         {/* Cancelled */}
         {isCancelled && (
-          <g transform={`translate(${fromPos.x},${fromPos.y})`}>
+          <g transform={`translate(${fromXY[0]},${fromXY[1]})`}>
             <circle r="13" fill="#fee2e2" stroke="#dc2626" strokeWidth="1.5"/>
-            <text textAnchor="middle" dominantBaseline="middle" fontSize="13" y="-1" fill="#dc2626">✕</text>
+            <text textAnchor="middle" dominantBaseline="middle" fontSize="13" fill="#dc2626">✕</text>
           </g>
         )}
       </svg>
 
-      <div style={{ padding:"6px 14px 8px", borderTop:"1px solid #e8e6de", display:"flex", gap:16, fontSize:11, color:"#64748b" }}>
+      <div style={{ padding:"6px 14px 8px", borderTop:"1px solid #dce8f0", display:"flex", gap:16, fontSize:11, color:"#64748b", background:"#f0f6fc" }}>
         <span style={{ color:"#b45309" }}>● {fromIata}</span>
         <span style={{ color:"#15803d" }}>● {toIata}</span>
-        {planeLat && <span style={{ color:"#94a3b8" }}>Real position from OpenSky</span>}
+        {planeLat && <span style={{ color:"#2563eb" }}>📡 Live position from OpenSky</span>}
       </div>
     </div>
   );
@@ -510,20 +451,18 @@ function LivePage({ fk }) {
   const fromIata   = liveData.departure?.iata || meta?.from || "—";
   const toIata     = liveData.arrival?.iata   || meta?.to   || "—";
   const progress   = calcProgress(liveData.departure?.scheduled, liveData.arrival?.scheduled, apiStatus);
-
-  const altFt    = position?.altitudeFt  || 0;
-  const speedMph = position?.speedMph    || 0;
-  const planeLat = position?.latitude    || null;
-  const planeLng = position?.longitude   || null;
+  const altFt      = position?.altitudeFt || 0;
+  const speedMph   = position?.speedMph   || 0;
+  const planeLat   = position?.latitude   || null;
+  const planeLng   = position?.longitude  || null;
 
   const col         = pc(phase);
   const isCancelled = phase === "Cancelled";
   const isEnRoute   = phase === "En Route" || phase.includes("In Flight");
   const isLanded    = phase === "Landed";
-
-  const statusMsg    = isCancelled ? "Yep, it's cancelled" : delayMin > 0 ? `Running +${delayMin} min late` : isLanded ? "Wheels down!" : isEnRoute ? "In the air" : "Checking in...";
-  const statusBg     = isCancelled ? "#fee2e2" : delayMin > 0 ? "#ffedd5" : isLanded ? "#dcfce7" : isEnRoute ? "#dbeafe" : "#f1f5f9";
-  const statusBorder = isCancelled ? "#fca5a5" : delayMin > 0 ? "#fed7aa" : isLanded ? "#86efac" : isEnRoute ? "#93c5fd" : "#e2e8f0";
+  const statusMsg   = isCancelled ? "Yep, it's cancelled" : delayMin > 0 ? `Running +${delayMin} min late` : isLanded ? "Wheels down!" : isEnRoute ? "In the air" : "Checking in...";
+  const statusBg    = isCancelled ? "#fee2e2" : delayMin > 0 ? "#ffedd5" : isLanded ? "#dcfce7" : isEnRoute ? "#dbeafe" : "#f1f5f9";
+  const statusBdr   = isCancelled ? "#fca5a5" : delayMin > 0 ? "#fed7aa" : isLanded ? "#86efac" : isEnRoute ? "#93c5fd" : "#e2e8f0";
 
   return (
     <div>
@@ -536,20 +475,13 @@ function LivePage({ fk }) {
           <div style={{ fontSize:12, color:"#64748b" }}>{fromIata} → {toIata}</div>
           <div style={{ fontSize:13, color:col, fontWeight:600, marginTop:4 }}>{statusMsg}</div>
         </div>
-        <div style={{ background:statusBg, border:`1px solid ${statusBorder}`, borderRadius:10, padding:"8px 14px", textAlign:"center" }}>
+        <div style={{ background:statusBg, border:`1px solid ${statusBdr}`, borderRadius:10, padding:"8px 14px", textAlign:"center" }}>
           <div style={{ fontSize:10, color:col, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:600, marginBottom:2 }}>Live Status</div>
           <div style={{ fontSize:13, fontWeight:700, color:col }}>{phase}</div>
         </div>
       </div>
 
-      <FlightMap
-        fromIata={fromIata}
-        toIata={toIata}
-        progress={progress}
-        planeLat={planeLat}
-        planeLng={planeLng}
-        apiStatus={apiStatus}
-      />
+      <FlightMap fromIata={fromIata} toIata={toIata} progress={progress} planeLat={planeLat} planeLng={planeLng} apiStatus={apiStatus}/>
 
       {!isCancelled && (
         <div style={{ margin:"14px 0" }}>
@@ -568,15 +500,15 @@ function LivePage({ fk }) {
 
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
         <StatCard label="Departure"  value={depActual !== "—" ? depActual : "TBD"} sub={`Sched. ${depSched}${delayMin > 0 ? ` · +${delayMin}m` : ""}`} color={delayMin > 0 ? "#ea580c" : "#16a34a"}/>
-        <StatCard label="Arrives"    value={arrEst}                                sub={`Sched. ${arrSched}`}                                           color="#2563eb"/>
-        <StatCard label="Dep. Gate"  value={gate}                                  sub={`${fromIata} terminal`}                                         color="#7c3aed"/>
+        <StatCard label="Arrives"    value={arrEst}  sub={`Sched. ${arrSched}`}    color="#2563eb"/>
+        <StatCard label="Dep. Gate"  value={gate}    sub={`${fromIata} terminal`}  color="#7c3aed"/>
         {isEnRoute && position && <StatCard label="Altitude" value={`${(altFt/1000).toFixed(0)}k ft`} sub={`${speedMph} mph`} color="#c2820a"/>}
         {!isEnRoute && !isCancelled && <StatCard label="Delay" value={delayMin > 0 ? `+${delayMin}m` : "None"} sub={delayMin > 0 ? "Behind schedule" : "On time!"} color={delayMin > 0 ? "#ea580c" : "#16a34a"}/>}
         {isCancelled && <StatCard label="Status" value="VOID" sub="Cancelled" color="#dc2626"/>}
       </div>
 
       <div style={{ padding:"10px 14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:10, fontSize:12, color:"#15803d", display:"flex", alignItems:"center", gap:8 }}>
-        <span style={{ fontSize:16 }}>✓</span>
+        <span>✓</span>
         <span>Live data from AviationStack{position ? " + OpenSky" : ""} · Updated just now</span>
       </div>
     </div>
@@ -587,7 +519,6 @@ function LivePage({ fk }) {
 
 function HistoryPage({ fk }) {
   const [tab, setTab] = useState("dist");
-
   const s        = generateStats(fk);
   const meta     = FLIGHTS[fk];
   const dr       = 1 - s.onTimeRate;
@@ -634,14 +565,11 @@ function HistoryPage({ fk }) {
               <XAxis dataKey="label" tick={{ fill:"#94a3b8", fontSize:11 }} axisLine={false} tickLine={false}/>
               <YAxis tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
               <Tooltip content={<TT/>}/>
-              <Bar dataKey="count" name="Flights" radius={[4,4,0,0]}>
-                {s.histogram.map((e, i) => <Cell key={i} fill={e.color}/>)}
-              </Bar>
+              <Bar dataKey="count" name="Flights" radius={[4,4,0,0]}>{s.histogram.map((e, i) => <Cell key={i} fill={e.color}/>)}</Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
-
       {tab === "day" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Pick the right day and you'll land on time more often.</p>
@@ -651,17 +579,12 @@ function HistoryPage({ fk }) {
               <XAxis dataKey="day" tick={{ fill:"#94a3b8", fontSize:12 }} axisLine={false} tickLine={false}/>
               <YAxis tickFormatter={v => `${(v * 100).toFixed(0)}%`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
               <Tooltip content={<TT/>}/>
-              <Bar dataKey="delayRate" name="Delay Rate" radius={[4,4,0,0]}>
-                {s.byDay.map((d, i) => <Cell key={i} fill={rc(d.delayRate)}/>)}
-              </Bar>
+              <Bar dataKey="delayRate" name="Delay Rate" radius={[4,4,0,0]}>{s.byDay.map((d, i) => <Cell key={i} fill={rc(d.delayRate)}/>)}</Bar>
             </BarChart>
           </ResponsiveContainer>
-          <p style={{ fontSize:12, color:"#64748b", marginTop:10 }}>
-            Fly on <b style={{ color:"#16a34a" }}>{bestDay}</b> · Avoid <b style={{ color:"#dc2626" }}>{worstDay}</b>
-          </p>
+          <p style={{ fontSize:12, color:"#64748b", marginTop:10 }}>Fly on <b style={{ color:"#16a34a" }}>{bestDay}</b> · Avoid <b style={{ color:"#dc2626" }}>{worstDay}</b></p>
         </div>
       )}
-
       {tab === "mo" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Some months are rougher than others.</p>
@@ -676,7 +599,6 @@ function HistoryPage({ fk }) {
           </ResponsiveContainer>
         </div>
       )}
-
       {tab === "cause" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Here's who to blame when this flight is late.</p>
@@ -716,9 +638,7 @@ function HistoryPage({ fk }) {
         <div style={{ fontSize:26, fontWeight:800, color:"#92400e" }}>{pct(dr)}</div>
         <div>
           <div style={{ fontSize:12, fontWeight:600, color:"#1e293b", marginBottom:2 }}>chance this flight delays you</div>
-          <div style={{ fontSize:11, color:"#64748b" }}>
-            Avg <b style={{ color:"#c2820a" }}>{fmt(s.avgDelay)} min</b> when late · Safest day: <b style={{ color:"#16a34a" }}>{bestDay}</b>
-          </div>
+          <div style={{ fontSize:11, color:"#64748b" }}>Avg <b style={{ color:"#c2820a" }}>{fmt(s.avgDelay)} min</b> when late · Safest day: <b style={{ color:"#16a34a" }}>{bestDay}</b></div>
         </div>
       </div>
     </div>
@@ -742,7 +662,6 @@ function AltsPage({ fk, liveDelayMin, liveStatus }) {
   const meta  = FLIGHTS[fk];
   const alts  = ALTS[fk] || [];
   const [filter, setFilter] = useState("all");
-
   const isDelayed = liveDelayMin > 0 || liveStatus === "cancelled";
   const isCx      = liveStatus === "cancelled";
   const filtered  = filter === "all" ? alts : alts.filter(a => a.type === filter);
@@ -765,16 +684,10 @@ function AltsPage({ fk, liveDelayMin, liveStatus }) {
     <div>
       <div style={{ marginBottom:14, padding:"12px 14px", background:isCx ? "#fef2f2" : "#fff7ed", border:`1px solid ${isCx ? "#fca5a5" : "#fed7aa"}`, borderRadius:12, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
         <div>
-          <div style={{ fontSize:13, fontWeight:700, color:isCx ? "#dc2626" : "#c2410c", marginBottom:2 }}>
-            {isCx ? "Flight cancelled" : "Flight delayed"}
-          </div>
-          <div style={{ fontSize:12, color:"#64748b" }}>
-            {isCx ? `${fk} isn't going anywhere.` : `${fk} is +${liveDelayMin}m late.`} Here are your options.
-          </div>
+          <div style={{ fontSize:13, fontWeight:700, color:isCx ? "#dc2626" : "#c2410c", marginBottom:2 }}>{isCx ? "Flight cancelled" : "Flight delayed"}</div>
+          <div style={{ fontSize:12, color:"#64748b" }}>{isCx ? `${fk} isn't going anywhere.` : `${fk} is +${liveDelayMin}m late.`} Here are your options.</div>
         </div>
-        <div style={{ fontSize:18, fontWeight:800, color:isCx ? "#dc2626" : "#c2410c" }}>
-          {isCx ? "CANX" : `+${liveDelayMin}m`}
-        </div>
+        <div style={{ fontSize:18, fontWeight:800, color:isCx ? "#dc2626" : "#c2410c" }}>{isCx ? "CANX" : `+${liveDelayMin}m`}</div>
       </div>
 
       <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
