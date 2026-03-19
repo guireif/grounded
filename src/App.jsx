@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -695,8 +696,10 @@ export default function App() {
   const [sugg, setSugg]     = useState([]);
   const [page, setPage]     = useState("live");
   const [liveCache, setLiveCache] = useState({});  // cache live data per flight
+  const justPicked = useRef(false);
 
   useEffect(() => {
+    if (justPicked.current) { justPicked.current = false; return; }
     if (q.trim().length < 2) { setSugg([]); return; }
     const timer = setTimeout(() => {
       fetch(`/api/search?q=${encodeURIComponent(q)}`)
@@ -704,10 +707,7 @@ export default function App() {
         .then(data => {
           if (data.results) {
             setSugg(data.results.map(r => ({
-              key:    r.flight,
-              label:  r.flight,
-              route:  r.route,
-              airline:r.airline,
+              key: r.flight, label: r.flight, route: r.route, airline: r.airline,
             })));
           }
         })
@@ -730,7 +730,7 @@ export default function App() {
       .catch(() => {});
   }, [sel]);
 
-  const pick = k => { setSel(k); setQ(k); setSugg([]); };
+  const pick = k => { justPicked.current = true; setSel(k); setQ(k); setSugg([]); };
 
   const cached     = sel ? liveCache[sel] : null;
   const liveDelay  = cached ? (cached.departure?.delay || cached.arrival?.delay || 0) : 0;
