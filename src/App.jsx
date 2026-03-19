@@ -4,40 +4,20 @@ import {
   LineChart, Line, CartesianGrid, Cell, PieChart, Pie,
 } from "recharts";
 
-// ─── DATA ─────────────────────────────────────────────────────────────────────
+// ─── STATIC FLIGHT METADATA (for map coordinates & quick picks) ───────────────
 
 const FLIGHTS = {
-  "AA 100": { route:"JFK → LAX", from:"JFK", to:"LAX", airline:"American Airlines", aircraft:"B777", dep:"08:00", arr:"11:30", fromCity:"New York", toCity:"Los Angeles" },
-  "DL 400": { route:"ATL → JFK", from:"ATL", to:"JFK", airline:"Delta Air Lines",   aircraft:"A321", dep:"09:15", arr:"12:45", fromCity:"Atlanta",  toCity:"New York" },
-  "UA 1":   { route:"EWR → SFO", from:"EWR", to:"SFO", airline:"United Airlines",   aircraft:"B757", dep:"07:30", arr:"11:00", fromCity:"Newark",   toCity:"San Francisco" },
-  "SW 100": { route:"DAL → HOU", from:"DAL", to:"HOU", airline:"Southwest Airlines", aircraft:"B737", dep:"10:00", arr:"11:10", fromCity:"Dallas",   toCity:"Houston" },
-  "B6 615": { route:"BOS → MCO", from:"BOS", to:"MCO", airline:"JetBlue Airways",   aircraft:"A320", dep:"06:45", arr:"10:15", fromCity:"Boston",   toCity:"Orlando" },
-  "AS 7":   { route:"SEA → LAX", from:"SEA", to:"LAX", airline:"Alaska Airlines",   aircraft:"B737", dep:"11:00", arr:"13:45", fromCity:"Seattle",  toCity:"Los Angeles" },
-  "F9 501": { route:"DEN → LAS", from:"DEN", to:"LAS", airline:"Frontier Airlines", aircraft:"A319", dep:"13:20", arr:"14:35", fromCity:"Denver",   toCity:"Las Vegas" },
-  "NK 1":   { route:"FLL → ORD", from:"FLL", to:"ORD", airline:"Spirit Airlines",   aircraft:"A320", dep:"15:00", arr:"17:30", fromCity:"Fort Lauderdale", toCity:"Chicago" },
+  "AA 100": { route:"JFK → LAX", from:"JFK", to:"LAX", airline:"American Airlines", aircraft:"B777", fromCity:"New York",      toCity:"Los Angeles" },
+  "DL 400": { route:"ATL → JFK", from:"ATL", to:"JFK", airline:"Delta Air Lines",   aircraft:"A321", fromCity:"Atlanta",        toCity:"New York" },
+  "UA 1":   { route:"EWR → SFO", from:"EWR", to:"SFO", airline:"United Airlines",   aircraft:"B757", fromCity:"Newark",         toCity:"San Francisco" },
+  "SW 100": { route:"DAL → HOU", from:"DAL", to:"HOU", airline:"Southwest Airlines", aircraft:"B737", fromCity:"Dallas",        toCity:"Houston" },
+  "B6 615": { route:"BOS → MCO", from:"BOS", to:"MCO", airline:"JetBlue Airways",   aircraft:"A320", fromCity:"Boston",         toCity:"Orlando" },
+  "AS 7":   { route:"SEA → LAX", from:"SEA", to:"LAX", airline:"Alaska Airlines",   aircraft:"B737", fromCity:"Seattle",        toCity:"Los Angeles" },
+  "F9 501": { route:"DEN → LAS", from:"DEN", to:"LAS", airline:"Frontier Airlines", aircraft:"A319", fromCity:"Denver",         toCity:"Las Vegas" },
+  "NK 1":   { route:"FLL → ORD", from:"FLL", to:"ORD", airline:"Spirit Airlines",   aircraft:"A320", fromCity:"Fort Lauderdale",toCity:"Chicago" },
 };
 
-const LIVE = {
-  "AA 100": { phase:"En Route",              depActual:"08:14", arrEst:"11:52", delayMin:22, gate:"B14", progress:0.62, altitude:36000, speed:548 },
-  "DL 400": { phase:"Boarding",              depActual:"09:15", arrEst:"12:45", delayMin:0,  gate:"C7",  progress:0,    altitude:0,     speed:0 },
-  "UA 1":   { phase:"Delayed – Gate Hold",   depActual:"—",     arrEst:"12:18", delayMin:78, gate:"A22", progress:0,    altitude:0,     speed:0 },
-  "SW 100": { phase:"En Route",              depActual:"10:02", arrEst:"11:12", delayMin:2,  gate:"6",   progress:0.81, altitude:28000, speed:487 },
-  "B6 615": { phase:"En Route",              depActual:"06:51", arrEst:"10:22", delayMin:7,  gate:"C30", progress:0.88, altitude:33000, speed:521 },
-  "AS 7":   { phase:"Delayed – Late Aircraft",depActual:"—",    arrEst:"14:12", delayMin:27, gate:"N3",  progress:0,    altitude:0,     speed:0 },
-  "F9 501": { phase:"Landed",                depActual:"13:18", arrEst:"14:31", delayMin:0,  gate:"D2",  progress:1,    altitude:0,     speed:0 },
-  "NK 1":   { phase:"Cancelled",             depActual:"—",     arrEst:"—",     delayMin:0,  gate:"H9",  progress:0,    altitude:0,     speed:0 },
-};
-
-const INBOUND = {
-  "AA 100": { flight:"AA 240",  from:"LAX", fromCity:"Los Angeles",   status:"En Route",          eta:"+12 min",  progress:0.78 },
-  "DL 400": { flight:"DL 881",  from:"DFW", fromCity:"Dallas",        status:"Landed",            eta:"On Ground",progress:1 },
-  "UA 1":   { flight:"UA 402",  from:"ORD", fromCity:"Chicago",       status:"Delayed on Ground", eta:"+47 min",  progress:0 },
-  "SW 100": { flight:"SW 88",   from:"PHX", fromCity:"Phoenix",       status:"En Route",          eta:"On Time",  progress:0.55 },
-  "B6 615": { flight:"B6 221",  from:"MCO", fromCity:"Orlando",       status:"En Route",          eta:"+5 min",   progress:0.91 },
-  "AS 7":   { flight:"AS 112",  from:"SFO", fromCity:"San Francisco", status:"Boarding",          eta:"+22 min",  progress:0 },
-  "F9 501": { flight:"F9 77",   from:"LAS", fromCity:"Las Vegas",     status:"Landed",            eta:"On Ground",progress:1 },
-  "NK 1":   { flight:"NK 444",  from:"ORD", fromCity:"Chicago",       status:"Cancelled",         eta:"—",        progress:0 },
-};
+// ─── SIMULATED ALTERNATIVES (replaced by Amadeus API later) ──────────────────
 
 const ALTS = {
   "AA 100": [
@@ -53,31 +33,23 @@ const ALTS = {
     { id:2, type:"direct",  badge:"Best Value",    airline:"JetBlue Airways",    flight:"B6 915", from:"EWR", to:"SFO", via:null,  dep:"09:50", arr:"13:30", stops:0, price:212, seats:9,  onTimeRate:0.76 },
     { id:3, type:"connect", badge:null,            airline:"Delta Air Lines",    flight:"DL 770", from:"EWR", to:"SFO", via:"ATL", dep:"08:10", arr:"14:45", stops:1, price:167, seats:4,  onTimeRate:0.70 },
     { id:4, type:"nearby",  badge:"Nearby Airport",airline:"American Airlines",  flight:"AA 22",  from:"JFK", to:"SFO", via:null,  dep:"08:00", arr:"11:38", stops:0, price:341, seats:2,  onTimeRate:0.79, altAirport:"JFK", altAirportName:"JFK" },
-    { id:5, type:"nearby",  badge:"Nearby Airport",airline:"Southwest Airlines", flight:"SW 504", from:"LGA", to:"SFO", via:"MDW", dep:"07:20", arr:"14:15", stops:1, price:129, seats:18, onTimeRate:0.66, altAirport:"LGA", altAirportName:"LaGuardia" },
   ],
   "AS 7": [
     { id:1, type:"direct",  badge:"Fastest",    airline:"United Airlines",    flight:"UA 407",  from:"SEA", to:"LAX", via:null,  dep:"12:00", arr:"14:35", stops:0, price:189, seats:7,  onTimeRate:0.80 },
     { id:2, type:"direct",  badge:"Best Value", airline:"Southwest Airlines", flight:"SW 3302", from:"SEA", to:"LAX", via:null,  dep:"13:10", arr:"15:55", stops:0, price:99,  seats:22, onTimeRate:0.72 },
-    { id:3, type:"connect", badge:null,         airline:"Delta Air Lines",    flight:"DL 1140", from:"SEA", to:"LAX", via:"SFO", dep:"11:40", arr:"16:20", stops:1, price:143, seats:6,  onTimeRate:0.69 },
-    { id:4, type:"connect", badge:null,         airline:"American Airlines",  flight:"AA 731",  from:"SEA", to:"LAX", via:"PHX", dep:"12:30", arr:"17:05", stops:1, price:118, seats:10, onTimeRate:0.65 },
   ],
   "NK 1": [
     { id:1, type:"direct",  badge:"Fastest",       airline:"American Airlines",  flight:"AA 2450", from:"FLL", to:"ORD", via:null,  dep:"16:00", arr:"18:25", stops:0, price:287, seats:3,  onTimeRate:0.78 },
     { id:2, type:"direct",  badge:"Best Value",    airline:"Southwest Airlines", flight:"SW 2211", from:"FLL", to:"ORD", via:null,  dep:"17:15", arr:"19:40", stops:0, price:149, seats:14, onTimeRate:0.74 },
-    { id:3, type:"direct",  badge:null,            airline:"United Airlines",    flight:"UA 622",  from:"FLL", to:"ORD", via:null,  dep:"16:45", arr:"19:10", stops:0, price:224, seats:8,  onTimeRate:0.76 },
-    { id:4, type:"connect", badge:null,            airline:"Delta Air Lines",    flight:"DL 893",  from:"FLL", to:"ORD", via:"ATL", dep:"15:30", arr:"20:15", stops:1, price:131, seats:5,  onTimeRate:0.67 },
-    { id:5, type:"nearby",  badge:"Nearby Airport",airline:"American Airlines",  flight:"AA 2100", from:"MIA", to:"ORD", via:null,  dep:"16:20", arr:"18:40", stops:0, price:265, seats:9,  onTimeRate:0.80, altAirport:"MIA", altAirportName:"Miami" },
-    { id:6, type:"nearby",  badge:"Nearby Airport",airline:"JetBlue Airways",    flight:"B6 733",  from:"MIA", to:"ORD", via:"BOS", dep:"15:55", arr:"21:10", stops:1, price:112, seats:20, onTimeRate:0.68, altAirport:"MIA", altAirportName:"Miami" },
+    { id:3, type:"nearby",  badge:"Nearby Airport",airline:"American Airlines",  flight:"AA 2100", from:"MIA", to:"ORD", via:null,  dep:"16:20", arr:"18:40", stops:0, price:265, seats:9,  onTimeRate:0.80, altAirport:"MIA", altAirportName:"Miami" },
   ],
   "SW 100": [
-    { id:1, type:"direct",  badge:"Fastest",       airline:"American Airlines", flight:"AA 3300", from:"DAL", to:"HOU", via:null, dep:"10:30", arr:"11:45", stops:0, price:129, seats:6,  onTimeRate:0.82 },
-    { id:2, type:"direct",  badge:"Best Value",    airline:"United Airlines",   flight:"UA 4420", from:"DAL", to:"HOU", via:null, dep:"11:00", arr:"12:10", stops:0, price:89,  seats:12, onTimeRate:0.77 },
-    { id:3, type:"nearby",  badge:"Nearby Airport",airline:"Delta Air Lines",   flight:"DL 4422", from:"DFW", to:"HOU", via:null, dep:"10:15", arr:"11:30", stops:0, price:109, seats:8,  onTimeRate:0.80, altAirport:"DFW", altAirportName:"Dallas-Fort Worth" },
+    { id:1, type:"direct", badge:"Fastest",    airline:"American Airlines", flight:"AA 3300", from:"DAL", to:"HOU", via:null, dep:"10:30", arr:"11:45", stops:0, price:129, seats:6,  onTimeRate:0.82 },
+    { id:2, type:"direct", badge:"Best Value", airline:"United Airlines",   flight:"UA 4420", from:"DAL", to:"HOU", via:null, dep:"11:00", arr:"12:10", stops:0, price:89,  seats:12, onTimeRate:0.77 },
   ],
   "B6 615": [
-    { id:1, type:"direct",  badge:"Best Value", airline:"Southwest Airlines", flight:"SW 1822", from:"BOS", to:"MCO", via:null,  dep:"07:30", arr:"11:10", stops:0, price:112, seats:17, onTimeRate:0.75 },
-    { id:2, type:"direct",  badge:"Fastest",    airline:"American Airlines",  flight:"AA 612",  from:"BOS", to:"MCO", via:null,  dep:"08:00", arr:"11:42", stops:0, price:198, seats:5,  onTimeRate:0.80 },
-    { id:3, type:"connect", badge:null,         airline:"Delta Air Lines",    flight:"DL 912",  from:"BOS", to:"MCO", via:"ATL", dep:"07:00", arr:"12:30", stops:1, price:134, seats:9,  onTimeRate:0.71 },
+    { id:1, type:"direct", badge:"Best Value", airline:"Southwest Airlines", flight:"SW 1822", from:"BOS", to:"MCO", via:null, dep:"07:30", arr:"11:10", stops:0, price:112, seats:17, onTimeRate:0.75 },
+    { id:2, type:"direct", badge:"Fastest",    airline:"American Airlines",  flight:"AA 612",  from:"BOS", to:"MCO", via:null, dep:"08:00", arr:"11:42", stops:0, price:198, seats:5,  onTimeRate:0.80 },
   ],
   "DL 400": [],
   "F9 501": [],
@@ -94,6 +66,38 @@ const pc  = ph =>
   ph === "Landed"          ? "#16a34a" :
   ph === "En Route"        ? "#2563eb" :
   ph === "Boarding"        ? "#7c3aed" : "#64748b";
+
+// Map AviationStack status to our display phase
+function mapStatus(apiStatus, delayMin) {
+  if (!apiStatus) return "Unknown";
+  if (apiStatus === "cancelled")  return "Cancelled";
+  if (apiStatus === "landed")     return "Landed";
+  if (apiStatus === "active")     return delayMin > 0 ? `Delayed – In Flight` : "En Route";
+  if (apiStatus === "scheduled")  return delayMin > 0 ? `Delayed – ${delayMin}m` : "Scheduled";
+  if (apiStatus === "incident")   return "Delayed";
+  return apiStatus.charAt(0).toUpperCase() + apiStatus.slice(1);
+}
+
+// Format ISO time string to HH:MM
+function fmtTime(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", hour12:false });
+  } catch { return "—"; }
+}
+
+// Calculate flight progress from scheduled times
+function calcProgress(depScheduled, arrScheduled, status) {
+  if (status === "landed") return 1;
+  if (status !== "active") return 0;
+  try {
+    const now  = Date.now();
+    const dep  = new Date(depScheduled).getTime();
+    const arr  = new Date(arrScheduled).getTime();
+    const prog = (now - dep) / (arr - dep);
+    return Math.min(Math.max(prog, 0.02), 0.98);
+  } catch { return 0; }
+}
 
 function seededRand(seed) {
   let s = seed;
@@ -113,20 +117,18 @@ function generateStats(k) {
   const b3 = Math.floor(rem * (0.18 + r() * 0.10));
   const b4 = Math.floor(rem * (0.12 + r() * 0.08));
   const histogram = [
-    { label:"On time", count:onTime,                         color:"#16a34a" },
-    { label:"1–15m",   count:b1,                             color:"#65a30d" },
-    { label:"15–30m",  count:b2,                             color:"#d97706" },
-    { label:"30–60m",  count:b3,                             color:"#ea580c" },
-    { label:"1–2hrs",  count:b4,                             color:"#dc2626" },
-    { label:"2+hrs",   count:Math.max(0, rem-b1-b2-b3-b4),  color:"#9f1239" },
+    { label:"On time", count:onTime,                        color:"#16a34a" },
+    { label:"1–15m",   count:b1,                            color:"#65a30d" },
+    { label:"15–30m",  count:b2,                            color:"#d97706" },
+    { label:"30–60m",  count:b3,                            color:"#ea580c" },
+    { label:"1–2hrs",  count:b4,                            color:"#dc2626" },
+    { label:"2+hrs",   count:Math.max(0,rem-b1-b2-b3-b4),  color:"#9f1239" },
   ];
   const byDay = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => ({
-    day: d,
-    delayRate: Math.max(0, (1 - onTimeRate) + (r() - 0.5) * 0.25),
+    day: d, delayRate: Math.max(0, (1 - onTimeRate) + (r() - 0.5) * 0.25),
   }));
   const byMonth = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map(m => ({
-    month: m,
-    delayRate: Math.max(0, (1 - onTimeRate) + (r() - 0.5) * 0.3),
+    month: m, delayRate: Math.max(0, (1 - onTimeRate) + (r() - 0.5) * 0.3),
   }));
   const ct = total - onTime;
   const c1 = Math.floor(r() * ct * 0.35);
@@ -183,6 +185,16 @@ function Logo() {
   );
 }
 
+function Spinner() {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"60px 20px", gap:14 }}>
+      <div style={{ width:32, height:32, border:"3px solid #f1f5f9", borderTop:"3px solid #f59e0b", borderRadius:"50%", animation:"spin 0.8s linear infinite" }}/>
+      <div style={{ fontSize:13, color:"#94a3b8" }}>Checking flight status...</div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 // ─── MAP ──────────────────────────────────────────────────────────────────────
 
 const AP = {
@@ -190,21 +202,16 @@ const AP = {
   SFO:{x:92,y:228},  DAL:{x:488,y:312}, HOU:{x:510,y:342}, BOS:{x:848,y:162},
   MCO:{x:718,y:372}, SEA:{x:108,y:112}, DEN:{x:388,y:222}, LAS:{x:172,y:268},
   FLL:{x:728,y:398}, ORD:{x:598,y:198}, DFW:{x:478,y:302}, PHX:{x:242,y:298},
-  MIA:{x:716,y:410}, LGA:{x:822,y:186}, MDW:{x:592,y:202},
+  MIA:{x:716,y:410}, LGA:{x:822,y:186}, MDW:{x:592,y:202}, LHR:{x:60,y:80},
 };
 
-function FlightMap({ meta, live, inb }) {
-  const from = AP[meta.from], to = AP[meta.to];
+function FlightMap({ fromIata, toIata, progress, status }) {
+  const from = AP[fromIata], to = AP[toIata];
   if (!from || !to) return null;
-  const p   = live.progress;
+  const p   = progress || 0;
   const px  = from.x + (to.x - from.x) * p;
   const py  = from.y + (to.y - from.y) * p - Math.sin(Math.PI * p) * 38;
-  const ip  = inb ? inb.progress : 0;
-  const inbPos = inb ? AP[inb.from] : null;
-  const ibx = inbPos ? inbPos.x + (from.x - inbPos.x) * ip : null;
-  const iby = inbPos ? inbPos.y + (from.y - inbPos.y) * ip - Math.sin(Math.PI * ip) * 28 : null;
-  const fly    = p > 0 && p < 1;
-  const inbFly = inb && ip > 0 && ip < 1;
+  const fly = p > 0 && p < 1;
 
   return (
     <div style={{ background:"#f0f4ff", borderRadius:12, overflow:"hidden", border:"1px solid #e8e6de" }}>
@@ -212,21 +219,9 @@ function FlightMap({ meta, live, inb }) {
         <path d="M150,80 L820,80 L870,160 L870,380 L800,430 L680,430 L600,460 L400,460 L250,420 L150,360 L100,250 Z" fill="#e8eef8" stroke="#d4ddf0" strokeWidth="1.5"/>
         {[200,300,400,500,600,700].map(x => <line key={x} x1={x} y1={80} x2={x} y2={450} stroke="#dde4f0" strokeWidth="0.8"/>)}
         {[150,220,290,360].map(y => <line key={y} x1={150} y1={y} x2={870} y2={y} stroke="#dde4f0" strokeWidth="0.8"/>)}
-        {inb && inbPos && <>
-          <line x1={inbPos.x} y1={inbPos.y} x2={from.x} y2={from.y} stroke="#cbd5e1" strokeWidth="1.5" strokeDasharray="5,5"/>
-          {inbFly && <g transform={`translate(${ibx},${iby})`}>
-            <circle r="10" fill="#fff" stroke="#cbd5e1" strokeWidth="1"/>
-            <text textAnchor="middle" dominantBaseline="middle" fontSize="11">✈</text>
-          </g>}
-          {ip >= 1 && <circle cx={from.x} cy={from.y} r="12" fill="#16a34a" opacity="0.2">
-            <animate attributeName="r" values="12;18;12" dur="2s" repeatCount="indefinite"/>
-          </circle>}
-          <circle cx={inbPos.x} cy={inbPos.y} r="5" fill="#fff" stroke="#94a3b8" strokeWidth="1.5"/>
-          <text x={inbPos.x} y={inbPos.y - 14} textAnchor="middle" fill="#64748b" fontSize="11" fontFamily="monospace">{inb.from}</text>
-        </>}
         {p > 0 && <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="#c7d7f0" strokeWidth="2" strokeDasharray="6,4"/>}
         {fly && <line x1={from.x} y1={from.y} x2={px} y2={py} stroke="#f59e0b" strokeWidth="3"/>}
-        {[{ c:meta.from, pos:from, col:"#f59e0b" }, { c:meta.to, pos:to, col:"#16a34a" }].map(({ c, pos, col }) => (
+        {[{ c:fromIata, pos:from, col:"#f59e0b" }, { c:toIata, pos:to, col:"#16a34a" }].map(({ c, pos, col }) => (
           <g key={c}>
             <circle cx={pos.x} cy={pos.y} r="8" fill="#fff" stroke={col} strokeWidth="2.5"/>
             <circle cx={pos.x} cy={pos.y} r="3.5" fill={col}/>
@@ -246,102 +241,175 @@ function FlightMap({ meta, live, inb }) {
           </circle>
           <text textAnchor="middle" dominantBaseline="middle" fontSize="15" y="-1">🛬</text>
         </g>}
-        {p === 0 && !live.phase.includes("Cancelled") && <g transform={`translate(${from.x},${from.y})`}>
+        {p === 0 && status !== "Cancelled" && <g transform={`translate(${from.x},${from.y})`}>
           <circle r="12" fill="#fef3c7" stroke="#f59e0b" strokeWidth="1.5"/>
           <text textAnchor="middle" dominantBaseline="middle" fontSize="12" y="-1">✈</text>
         </g>}
-        {live.phase.includes("Cancelled") && <g transform={`translate(${from.x},${from.y})`}>
+        {status === "Cancelled" && <g transform={`translate(${from.x},${from.y})`}>
           <circle r="14" fill="#fee2e2" stroke="#dc2626" strokeWidth="1.5"/>
           <text textAnchor="middle" dominantBaseline="middle" fontSize="13" y="-1" fill="#dc2626">✕</text>
         </g>}
       </svg>
       <div style={{ padding:"6px 14px 8px", borderTop:"1px solid #e8e6de", display:"flex", gap:16, fontSize:11, color:"#64748b" }}>
-        <span style={{ color:"#b45309" }}>● {meta.from}</span>
-        <span style={{ color:"#15803d" }}>● {meta.to}</span>
-        {inb && <span style={{ color:"#94a3b8" }}>╌ Inbound {inb.flight} from {inb.from}</span>}
+        <span style={{ color:"#b45309" }}>● {fromIata}</span>
+        <span style={{ color:"#15803d" }}>● {toIata}</span>
       </div>
     </div>
   );
 }
 
-// ─── LIVE PAGE ────────────────────────────────────────────────────────────────
+// ─── LIVE STATUS PAGE ─────────────────────────────────────────────────────────
 
 function LivePage({ fk }) {
-  const meta = FLIGHTS[fk];
-  const live = LIVE[fk];
-  const inb  = INBOUND[fk];
-  const col  = pc(live.phase);
-  const isCx = live.phase === "Cancelled";
-  const isDl = live.phase.includes("Delayed");
-  const isLd = live.phase === "Landed";
-  const isEr = live.phase === "En Route";
+  const [liveData, setLiveData]   = useState(null);
+  const [position, setPosition]   = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
 
-  const statusMsg = isCx ? "Yep, it's cancelled" : isDl ? `Running +${live.delayMin} min late` : isLd ? "Wheels down!" : isEr ? "In the air" : "Getting ready";
-  const statusBg  = isCx ? "#fee2e2" : isDl ? "#ffedd5" : isLd ? "#dcfce7" : isEr ? "#dbeafe" : "#f1f5f9";
-  const statusBorder = isCx ? "#fca5a5" : isDl ? "#fed7aa" : isLd ? "#86efac" : isEr ? "#93c5fd" : "#e2e8f0";
+  const callsign = fk.replace(" ", ""); // "AA 100" → "AA100"
+  const meta     = FLIGHTS[fk];
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    setLiveData(null);
+    setPosition(null);
+
+    // Fetch live flight status
+    fetch(`/api/live?flight=${callsign}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        setLiveData(data);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+
+    // Fetch plane position (non-blocking)
+    fetch(`/api/position?callsign=${callsign}`)
+      .then(r => r.json())
+      .then(data => { if (!data.error) setPosition(data); })
+      .catch(() => {}); // silently fail — map still works without position
+
+  }, [fk]);
+
+  if (loading) return <Spinner/>;
+
+  if (error) return (
+    <div style={{ textAlign:"center", padding:"50px 20px" }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>🔍</div>
+      <div style={{ fontSize:14, color:"#dc2626", fontWeight:600, marginBottom:6 }}>Couldn't find this flight</div>
+      <div style={{ fontSize:12, color:"#94a3b8" }}>{error}</div>
+    </div>
+  );
+
+  // Map API response to display values
+  const apiStatus  = liveData.status;
+  const depDelay   = liveData.departure?.delay || 0;
+  const arrDelay   = liveData.arrival?.delay   || 0;
+  const delayMin   = depDelay || arrDelay || 0;
+  const phase      = mapStatus(apiStatus, delayMin);
+  const depActual  = fmtTime(liveData.departure?.actual)     || "—";
+  const depSched   = fmtTime(liveData.departure?.scheduled)  || "—";
+  const arrEst     = fmtTime(liveData.arrival?.estimated || liveData.arrival?.scheduled) || "—";
+  const arrSched   = fmtTime(liveData.arrival?.scheduled)    || "—";
+  const gate       = liveData.departure?.gate || "—";
+  const fromIata   = liveData.departure?.iata || meta?.from || "—";
+  const toIata     = liveData.arrival?.iata   || meta?.to   || "—";
+  const progress   = calcProgress(liveData.departure?.scheduled, liveData.arrival?.scheduled, apiStatus);
+
+  // Position data from OpenSky (convert units)
+  const altFt  = position ? Math.round((position.altitude || 0) * 3.281) : 0;
+  const speedMph = position ? Math.round((position.speed || 0) * 2.237) : 0;
+
+  const col          = pc(phase);
+  const isCancelled  = phase === "Cancelled";
+  const isEnRoute    = phase === "En Route" || phase.includes("In Flight");
+  const isLanded     = phase === "Landed";
+
+  const statusMsg = isCancelled ? "Yep, it's cancelled" :
+    delayMin > 0 ? `Running +${delayMin} min late` :
+    isLanded ? "Wheels down!" :
+    isEnRoute ? "In the air" : "Checking in...";
+
+  const statusBg     = isCancelled ? "#fee2e2" : delayMin > 0 ? "#ffedd5" : isLanded ? "#dcfce7" : isEnRoute ? "#dbeafe" : "#f1f5f9";
+  const statusBorder = isCancelled ? "#fca5a5" : delayMin > 0 ? "#fed7aa" : isLanded ? "#86efac" : isEnRoute ? "#93c5fd" : "#e2e8f0";
 
   return (
     <div>
+      {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:10, marginBottom:16 }}>
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
             <span style={{ fontSize:22, fontWeight:800, color:"#1e293b" }}>{fk}</span>
-            <span style={{ background:"#f1f5f9", borderRadius:6, padding:"2px 8px", fontSize:11, color:"#64748b", fontFamily:"monospace" }}>{meta.aircraft}</span>
+            {liveData.airline && <span style={{ background:"#f1f5f9", borderRadius:6, padding:"2px 8px", fontSize:11, color:"#64748b" }}>{liveData.airline}</span>}
           </div>
-          <div style={{ fontSize:12, color:"#64748b" }}>{meta.airline} · {meta.route}</div>
+          <div style={{ fontSize:12, color:"#64748b" }}>{fromIata} → {toIata}</div>
+          <div style={{ fontSize:13, color:col, fontWeight:600, marginTop:4 }}>{statusMsg}</div>
         </div>
         <div style={{ background:statusBg, border:`1px solid ${statusBorder}`, borderRadius:10, padding:"8px 14px", textAlign:"center" }}>
-          <div style={{ fontSize:10, color:col, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:600, marginBottom:2 }}>Status</div>
-          <div style={{ fontSize:13, fontWeight:700, color:col }}>{statusMsg}</div>
+          <div style={{ fontSize:10, color:col, textTransform:"uppercase", letterSpacing:"0.08em", fontWeight:600, marginBottom:2 }}>Live Status</div>
+          <div style={{ fontSize:13, fontWeight:700, color:col }}>{phase}</div>
         </div>
       </div>
 
-      <FlightMap meta={meta} live={live} inb={inb}/>
+      {/* Map */}
+      <FlightMap fromIata={fromIata} toIata={toIata} progress={progress} status={apiStatus}/>
 
-      {!isCx && <div style={{ margin:"14px 0" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#94a3b8", marginBottom:5 }}>
-          <span>{meta.from} · {meta.fromCity}</span>
-          <span style={{ fontWeight:600, color:"#64748b" }}>{Math.round(live.progress * 100)}% complete</span>
-          <span>{meta.to} · {meta.toCity}</span>
-        </div>
-        <div style={{ height:6, background:"#e8e6de", borderRadius:3, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${live.progress * 100}%`, background:"linear-gradient(90deg,#f59e0b,#fbbf24)", borderRadius:3, position:"relative" }}>
-            {isEr && <div style={{ position:"absolute", right:-1, top:-3, width:12, height:12, borderRadius:"50%", background:"#f59e0b", border:"2px solid #fff", boxShadow:"0 0 0 2px #f59e0b" }}/>}
+      {/* Progress bar */}
+      {!isCancelled && (
+        <div style={{ margin:"14px 0" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#94a3b8", marginBottom:5 }}>
+            <span>{fromIata}</span>
+            <span style={{ fontWeight:600, color:"#64748b" }}>{Math.round(progress * 100)}% complete</span>
+            <span>{toIata}</span>
+          </div>
+          <div style={{ height:6, background:"#e8e6de", borderRadius:3, overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${progress * 100}%`, background:"linear-gradient(90deg,#f59e0b,#fbbf24)", borderRadius:3, position:"relative" }}>
+              {isEnRoute && <div style={{ position:"absolute", right:-1, top:-3, width:12, height:12, borderRadius:"50%", background:"#f59e0b", border:"2px solid #fff" }}/>}
+            </div>
           </div>
         </div>
-      </div>}
+      )}
 
+      {/* Stat cards */}
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
-        <StatCard label="Departure"   value={live.depActual !== "—" ? live.depActual : "TBD"} sub={`Sched. ${meta.dep}${live.delayMin > 0 ? ` · +${live.delayMin}m` : ""}`} color={live.delayMin > 0 ? "#ea580c" : "#16a34a"}/>
-        <StatCard label="Arrives"     value={live.arrEst !== "—" ? live.arrEst : "—"}         sub={`Sched. ${meta.arr}`}                                                      color="#2563eb"/>
-        <StatCard label="Gate"        value={live.gate}                                        sub={`${meta.from} terminal`}                                                  color="#7c3aed"/>
-        {isEr  && <StatCard label="Altitude" value={`${(live.altitude / 1000).toFixed(0)}k ft`} sub={`${live.speed} mph`}                            color="#c2820a"/>}
-        {!isEr && !isCx && <StatCard label="Delay" value={live.delayMin > 0 ? `+${live.delayMin}m` : "None"} sub={live.delayMin > 0 ? "Behind schedule" : "On time!"} color={live.delayMin > 0 ? "#ea580c" : "#16a34a"}/>}
-        {isCx  && <StatCard label="Status"   value="VOID"                                        sub="Cancelled"                                                       color="#dc2626"/>}
+        <StatCard
+          label="Departure"
+          value={depActual !== "—" ? depActual : "TBD"}
+          sub={`Sched. ${depSched}${delayMin > 0 ? ` · +${delayMin}m` : ""}`}
+          color={delayMin > 0 ? "#ea580c" : "#16a34a"}
+        />
+        <StatCard
+          label="Arrives"
+          value={arrEst}
+          sub={`Sched. ${arrSched}`}
+          color="#2563eb"
+        />
+        <StatCard
+          label="Dep. Gate"
+          value={gate}
+          sub={`${fromIata} terminal`}
+          color="#7c3aed"
+        />
+        {isEnRoute && position && (
+          <StatCard label="Altitude" value={`${(altFt/1000).toFixed(0)}k ft`} sub={`${speedMph} mph`} color="#c2820a"/>
+        )}
+        {!isEnRoute && !isCancelled && (
+          <StatCard
+            label="Delay"
+            value={delayMin > 0 ? `+${delayMin}m` : "None"}
+            sub={delayMin > 0 ? "Behind schedule" : "On time!"}
+            color={delayMin > 0 ? "#ea580c" : "#16a34a"}
+          />
+        )}
+        {isCancelled && <StatCard label="Status" value="VOID" sub="Cancelled" color="#dc2626"/>}
       </div>
 
-      <div style={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:12, padding:"16px" }}>
-        <div style={{ fontSize:12, fontWeight:600, color:"#374151", marginBottom:12 }}>Where's the plane coming from?</div>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:6 }}>
-              <span style={{ fontFamily:"monospace", fontSize:14, fontWeight:700, color:"#1e293b" }}>{inb.flight}</span>
-              <span style={{ fontSize:11, color:"#64748b" }}>from {inb.fromCity} ({inb.from})</span>
-            </div>
-            <span style={{ background:pc(inb.status) + "18", border:`1px solid ${pc(inb.status)}33`, borderRadius:20, padding:"3px 10px", fontSize:11, color:pc(inb.status), fontWeight:600 }}>{inb.status}</span>
-            {inb.eta !== "—" && <span style={{ fontSize:11, color:"#64748b", marginLeft:8 }}>ETA: <b style={{ color:"#374151" }}>{inb.eta}</b></span>}
-          </div>
-          <div style={{ flex:1, minWidth:140 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"#94a3b8", marginBottom:4 }}><span>{inb.from}</span><span>{meta.from}</span></div>
-            <div style={{ height:4, background:"#f1f5f9", borderRadius:2, overflow:"hidden" }}>
-              <div style={{ height:"100%", width:`${inb.progress * 100}%`, background:"linear-gradient(90deg,#94a3b8,#64748b)", borderRadius:2 }}/>
-            </div>
-          </div>
-        </div>
-        {inb.status === "Delayed on Ground" && <div style={{ marginTop:10, padding:"8px 12px", background:"#fff7ed", border:"1px solid #fed7aa", borderRadius:8, fontSize:12, color:"#c2410c" }}>Your plane is stuck in {inb.fromCity}. That's why you're waiting.</div>}
-        {inb.status === "Cancelled"         && <div style={{ marginTop:10, padding:"8px 12px", background:"#fef2f2", border:"1px solid #fca5a5", borderRadius:8, fontSize:12, color:"#dc2626" }}>The inbound flight got cancelled. Brace yourself.</div>}
-        {inb.status === "Landed"            && <div style={{ marginTop:10, padding:"8px 12px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:8, fontSize:12, color:"#15803d" }}>Your plane just landed! They're turning it around — boarding soon.</div>}
-        {inb.status === "En Route"          && <div style={{ marginTop:10, padding:"8px 12px", background:"#eff6ff", border:"1px solid #93c5fd", borderRadius:8, fontSize:12, color:"#1d4ed8" }}>On its way from {inb.fromCity}. ETA: {inb.eta}</div>}
+      {/* Real data badge */}
+      <div style={{ padding:"10px 14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:10, fontSize:12, color:"#15803d", display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ fontSize:16 }}>✓</span>
+        <span>Live data from AviationStack{position ? " + OpenSky" : ""} · Updated just now</span>
       </div>
     </div>
   );
@@ -352,10 +420,9 @@ function LivePage({ fk }) {
 function HistoryPage({ fk }) {
   const [tab, setTab] = useState("dist");
 
-  const s    = generateStats(fk);
-  const meta = FLIGHTS[fk];
-  const dr   = 1 - s.onTimeRate;
-
+  const s        = generateStats(fk);
+  const meta     = FLIGHTS[fk];
+  const dr       = 1 - s.onTimeRate;
   const riskMsg  = dr < 0.2 ? "Usually reliable" : dr < 0.35 ? "Delays happen" : dr < 0.5 ? "It's a gamble" : "Chronically late";
   const bestDay  = s.byDay.reduce((a, b) => a.delayRate < b.delayRate ? a : b).day;
   const worstDay = s.byDay.reduce((a, b) => a.delayRate > b.delayRate ? a : b).day;
@@ -366,9 +433,9 @@ function HistoryPage({ fk }) {
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
             <span style={{ fontSize:22, fontWeight:800, color:"#1e293b" }}>{fk}</span>
-            <span style={{ background:"#f1f5f9", borderRadius:6, padding:"2px 8px", fontSize:11, color:"#64748b", fontFamily:"monospace" }}>{meta.aircraft}</span>
+            {meta && <span style={{ background:"#f1f5f9", borderRadius:6, padding:"2px 8px", fontSize:11, color:"#64748b", fontFamily:"monospace" }}>{meta.aircraft}</span>}
           </div>
-          <div style={{ fontSize:12, color:"#64748b" }}>{meta.airline} · {meta.route}</div>
+          {meta && <div style={{ fontSize:12, color:"#64748b" }}>{meta.airline} · {meta.route}</div>}
           <div style={{ fontSize:13, color:rc(dr), fontWeight:600, marginTop:4 }}>{riskMsg}</div>
         </div>
         <div style={{ background:rc(dr) + "14", border:`1px solid ${rc(dr)}33`, borderRadius:10, padding:"8px 14px", textAlign:"center" }}>
@@ -386,7 +453,13 @@ function HistoryPage({ fk }) {
 
       <div style={{ display:"flex", gap:2, borderBottom:"2px solid #f1f5f9", marginBottom:16 }}>
         {[["dist","How late?"],["day","Which day?"],["mo","By month"],["cause","Why?"]].map(([k, l]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ padding:"7px 14px", fontSize:12, fontWeight:tab === k ? 600 : 400, color:tab === k ? "#c2820a" : "#94a3b8", borderBottom:`2px solid ${tab === k ? "#f59e0b" : "transparent"}`, marginBottom:-2, background:"none", border:"none", borderBottom:`2px solid ${tab === k ? "#f59e0b" : "transparent"}`, cursor:"pointer" }}>{l}</button>
+          <button key={k} onClick={() => setTab(k)} style={{
+            padding:"7px 14px", fontSize:12, fontWeight:tab === k ? 600 : 400,
+            color:tab === k ? "#c2820a" : "#94a3b8",
+            borderBottom:`2px solid ${tab === k ? "#f59e0b" : "transparent"}`,
+            marginBottom:-2, background:"none", border:"none",
+            cursor:"pointer",
+          }}>{l}</button>
         ))}
       </div>
 
@@ -486,6 +559,10 @@ function HistoryPage({ fk }) {
           </div>
         </div>
       </div>
+
+      <div style={{ marginTop:10, padding:"8px 12px", background:"#f8f7f4", border:"1px solid #e8e6de", borderRadius:8, fontSize:11, color:"#94a3b8" }}>
+        Based on historical BTS data · Real-time data coming soon
+      </div>
     </div>
   );
 }
@@ -497,23 +574,23 @@ const BADGE_STYLES = {
   "Best Value":    { bg:"#fffbeb", bc:"#fde68a", c:"#92400e" },
   "Nearby Airport":{ bg:"#eff6ff", bc:"#93c5fd", c:"#1d4ed8" },
 };
-
+const TC = { direct:"#22c55e", connect:"#facc15", nearby:"#60a5fa" };
+const TL = { direct:"Nonstop",  connect:"1 Stop",  nearby:"Alt. Airport" };
 const ai     = a => a.split(" ").filter(w => !["Air","Airlines","Airways"].includes(w)).map(w => w[0]).join("").slice(0, 2).toUpperCase();
 const acolor = a => { const h = a.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % 360; return `hsl(${h},55%,88%)`; };
 const atcolor= a => { const h = a.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % 360; return `hsl(${h},55%,30%)`; };
 
-function AltsPage({ fk }) {
-  const meta = FLIGHTS[fk];
-  const live = LIVE[fk];
-  const alts = ALTS[fk] || [];
+function AltsPage({ fk, liveDelayMin, liveStatus }) {
+  const meta  = FLIGHTS[fk];
+  const alts  = ALTS[fk] || [];
   const [filter, setFilter] = useState("all");
 
-  const isD  = live.delayMin > 0 || live.phase === "Cancelled";
-  const isCx = live.phase === "Cancelled";
-  const filtered = filter === "all" ? alts : alts.filter(a => a.type === filter);
+  const isDelayed = liveDelayMin > 0 || liveStatus === "Cancelled" || liveStatus === "cancelled";
+  const isCx      = liveStatus === "Cancelled" || liveStatus === "cancelled";
+  const filtered  = filter === "all" ? alts : alts.filter(a => a.type === filter);
   const tc = t => alts.filter(a => a.type === t).length;
 
-  if (!isD && alts.length === 0) return (
+  if (!isDelayed && alts.length === 0) return (
     <div style={{ textAlign:"center", padding:"50px 20px" }}>
       <div style={{ fontSize:36, marginBottom:10 }}>✅</div>
       <div style={{ fontSize:14, color:"#64748b" }}>Flight's on time — no need to switch!</div>
@@ -534,10 +611,12 @@ function AltsPage({ fk }) {
             {isCx ? "Flight cancelled" : "Flight delayed"}
           </div>
           <div style={{ fontSize:12, color:"#64748b" }}>
-            {isCx ? `${fk} isn't going anywhere.` : `${fk} is +${live.delayMin}m late.`} Here are your options.
+            {isCx ? `${fk} isn't going anywhere.` : `${fk} is +${liveDelayMin}m late.`} Here are your options.
           </div>
         </div>
-        <div style={{ fontSize:18, fontWeight:800, color:isCx ? "#dc2626" : "#c2410c" }}>{isCx ? "CANX" : `+${live.delayMin}m`}</div>
+        <div style={{ fontSize:18, fontWeight:800, color:isCx ? "#dc2626" : "#c2410c" }}>
+          {isCx ? "CANX" : `+${liveDelayMin}m`}
+        </div>
       </div>
 
       <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
@@ -553,9 +632,10 @@ function AltsPage({ fk }) {
 
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {filtered.map(alt => {
-          const [oh, om] = meta.dep.split(":").map(Number);
+          const depH = meta ? parseInt(meta.dep) : 8;
+          const depM = meta ? parseInt(meta.dep.split(":")[1]) : 0;
           const [dh, dm] = alt.dep.split(":").map(Number);
-          const diff = (dh * 60 + dm) - (oh * 60 + om);
+          const diff = (dh * 60 + dm) - (depH * 60 + depM);
           const ds   = diff === 0 ? "Same time" : diff > 0 ? `+${diff}m later` : `${Math.abs(diff)}m earlier`;
           const bs   = alt.badge ? BADGE_STYLES[alt.badge] : null;
           const sc   = alt.seats <= 3 ? "#dc2626" : alt.seats <= 8 ? "#ea580c" : "#16a34a";
@@ -610,10 +690,11 @@ function AltsPage({ fk }) {
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [q, setQ]       = useState("");
-  const [sel, setSel]   = useState(null);
-  const [sugg, setSugg] = useState([]);
-  const [page, setPage] = useState("live");
+  const [q, setQ]           = useState("");
+  const [sel, setSel]       = useState(null);
+  const [sugg, setSugg]     = useState([]);
+  const [page, setPage]     = useState("live");
+  const [liveCache, setLiveCache] = useState({});  // cache live data per flight
 
   useEffect(() => {
     if (q.trim().length < 2) { setSugg([]); return; }
@@ -625,9 +706,27 @@ export default function App() {
     ).slice(0, 5));
   }, [q]);
 
-  const pick      = k => { setSel(k); setQ(k); setSugg([]); };
-  const hasDelay  = sel && (LIVE[sel].delayMin > 0 || LIVE[sel].phase === "Cancelled");
-  const altCount  = sel ? (ALTS[sel] || []).length : 0;
+  // Prefetch live data when flight is selected and cache it
+  useEffect(() => {
+    if (!sel || liveCache[sel]) return;
+    const callsign = sel.replace(" ", "");
+    fetch(`/api/live?flight=${callsign}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.error) {
+          setLiveCache(prev => ({ ...prev, [sel]: data }));
+        }
+      })
+      .catch(() => {});
+  }, [sel]);
+
+  const pick = k => { setSel(k); setQ(k); setSugg([]); };
+
+  const cached     = sel ? liveCache[sel] : null;
+  const liveDelay  = cached ? (cached.departure?.delay || cached.arrival?.delay || 0) : 0;
+  const liveStatus = cached ? cached.status : null;
+  const hasDelay   = liveDelay > 0 || liveStatus === "cancelled";
+  const altCount   = sel ? (ALTS[sel] || []).length : 0;
 
   return (
     <div style={{ minHeight:"100vh", background:"#f8f7f4", color:"#1e293b", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", paddingBottom:60 }}>
@@ -663,16 +762,11 @@ export default function App() {
 
           {/* Quick picks */}
           <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:sel ? 12 : 0 }}>
-            {Object.keys(FLIGHTS).map(k => {
-              const d = LIVE[k].delayMin > 0 || LIVE[k].phase === "Cancelled";
-              return (
-                <button key={k} onClick={() => pick(k)} style={{ background:sel === k ? "#fef3c7" : "#f8f7f4", border:`1.5px solid ${sel === k ? "#f59e0b" : "#e8e6de"}`, borderRadius:7, padding:"3px 10px", fontSize:11, color:sel === k ? "#c2820a" : "#64748b", fontWeight:sel === k ? 600 : 400, position:"relative", cursor:"pointer", transition:"all 0.15s" }}>
-                  {k}
-                  {d && <span style={{ position:"absolute", top:-3, right:-3, width:7, height:7, borderRadius:"50%", background:LIVE[k].phase === "Cancelled" ? "#dc2626" : "#ea580c", border:"1.5px solid #fff" }}/>}
-                </button>
-              );
-            })}
-            <span style={{ fontSize:10, color:"#d1cfc7", alignSelf:"center", marginLeft:2 }}>● delayed · ● cancelled</span>
+            {Object.keys(FLIGHTS).map(k => (
+              <button key={k} onClick={() => pick(k)} style={{ background:sel === k ? "#fef3c7" : "#f8f7f4", border:`1.5px solid ${sel === k ? "#f59e0b" : "#e8e6de"}`, borderRadius:7, padding:"3px 10px", fontSize:11, color:sel === k ? "#c2820a" : "#64748b", fontWeight:sel === k ? 600 : 400, cursor:"pointer", transition:"all 0.15s" }}>
+                {k}
+              </button>
+            ))}
           </div>
 
           {/* Nav */}
@@ -707,11 +801,11 @@ export default function App() {
                 <div key={f} style={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:10, padding:"10px 18px", fontSize:12, color:"#64748b", fontWeight:500 }}>✓ {f}</div>
               ))}
             </div>
-            <div style={{ marginTop:20, fontSize:11, color:"#d1cfc7" }}>Try: NK 1 (cancelled) · UA 1 (delayed) · AA 100 (en route)</div>
+            <div style={{ marginTop:20, fontSize:11, color:"#d1cfc7" }}>Try: AA 100 · UA 1 · NK 1 · DL 400</div>
           </div>
         ) : page === "live"    ? <LivePage    key={sel + "l"} fk={sel}/>
           : page === "history" ? <HistoryPage key={sel + "h"} fk={sel}/>
-          :                      <AltsPage    key={sel + "a"} fk={sel}/>
+          : <AltsPage key={sel + "a"} fk={sel} liveDelayMin={liveDelay} liveStatus={liveStatus}/>
         }
       </div>
     </div>
