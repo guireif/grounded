@@ -518,13 +518,53 @@ function LivePage({ fk }) {
 // ─── HISTORY PAGE ─────────────────────────────────────────────────────────────
 
 function HistoryPage({ fk }) {
-  const [tab, setTab] = useState("dist");
-  const s        = generateStats(fk);
-  const meta     = FLIGHTS[fk];
-  const dr       = 1 - s.onTimeRate;
+  const [tab, setTab]       = useState("dist");
+  const [stats, setStats]   = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState(null);
+
+  const meta = FLIGHTS[fk];
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+
+    // Parse "AA 100" → carrier="AA", flightNum="100"
+    const parts     = fk.trim().split(" ");
+    const carrier   = parts[0];
+    const flightNum = parts.slice(1).join("");
+
+    let url = `/api/history?carrier=${carrier}&flightNum=${flightNum}`;
+    if (meta?.from) url += `&origin=${meta.from}`;
+    if (meta?.to)   url += `&dest=${meta.to}`;
+
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error);
+        setStats(data);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [fk]);
+
+  if (loading) return <Spinner/>;
+
+  if (error) return (
+    <div style={{ textAlign:"center", padding:"50px 20px" }}>
+      <div style={{ fontSize:36, marginBottom:10 }}>🔍</div>
+      <div style={{ fontSize:14, color:"#dc2626", fontWeight:600, marginBottom:6 }}>No historical data found</div>
+      <div style={{ fontSize:12, color:"#94a3b8" }}>{error}</div>
+    </div>
+  );
+
+  const s        = stats;
+  const dr       = s.delayRate;
   const riskMsg  = dr < 0.2 ? "Usually reliable" : dr < 0.35 ? "Delays happen" : dr < 0.5 ? "It's a gamble" : "Chronically late";
   const bestDay  = s.byDay.reduce((a, b) => a.delayRate < b.delayRate ? a : b).day;
   const worstDay = s.byDay.reduce((a, b) => a.delayRate > b.delayRate ? a : b).day;
+  const pct      = v => `${(v * 100).toFixed(1)}%`;
+  const fmt      = v => typeof v === "number" ? v.toFixed(0) : "—";
 
   return (
     <div>
@@ -544,10 +584,10 @@ function HistoryPage({ fk }) {
       </div>
 
       <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
-        <StatCard label="On-Time"    value={pct(s.onTimeRate)}     sub={`${s.total} flights`} color="#16a34a"/>
-        <StatCard label="Delay Rate" value={pct(dr)}               sub="When not on-time"     color={rc(dr)}/>
-        <StatCard label="Avg Delay"  value={`${fmt(s.avgDelay)}m`} sub="When late"            color="#c2820a"/>
-        <StatCard label="Cancels"    value={pct(s.cancelRate)}     sub="Historical avg"        color="#7c3aed"/>
+        <StatCard label="On-Time"    value={pct(s.onTimeRate)}  sub={`${s.total} flights`} color="#16a34a"/>
+        <StatCard label="Delay Rate" value={pct(s.delayRate)}   sub="When not on-time"     color={rc(dr)}/>
+        <StatCard label="Avg Delay"  value={`${fmt(s.avgDelay)}m`} sub="When late"         color="#c2820a"/>
+        <StatCard label="Cancels"    value={pct(s.cancelRate)}  sub="Historical avg"        color="#7c3aed"/>
       </div>
 
       <div style={{ display:"flex", gap:2, borderBottom:"2px solid #f1f5f9", marginBottom:16 }}>
@@ -570,6 +610,7 @@ function HistoryPage({ fk }) {
           </ResponsiveContainer>
         </div>
       )}
+
       {tab === "day" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Pick the right day and you'll land on time more often.</p>
@@ -585,6 +626,7 @@ function HistoryPage({ fk }) {
           <p style={{ fontSize:12, color:"#64748b", marginTop:10 }}>Fly on <b style={{ color:"#16a34a" }}>{bestDay}</b> · Avoid <b style={{ color:"#dc2626" }}>{worstDay}</b></p>
         </div>
       )}
+
       {tab === "mo" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Some months are rougher than others.</p>
@@ -599,7 +641,8 @@ function HistoryPage({ fk }) {
           </ResponsiveContainer>
         </div>
       )}
-      {tab === "cause" && (
+
+      {tab === "cause" && s.causes.length > 0 && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Here's who to blame when this flight is late.</p>
           <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
@@ -640,6 +683,10 @@ function HistoryPage({ fk }) {
           <div style={{ fontSize:12, fontWeight:600, color:"#1e293b", marginBottom:2 }}>chance this flight delays you</div>
           <div style={{ fontSize:11, color:"#64748b" }}>Avg <b style={{ color:"#c2820a" }}>{fmt(s.avgDelay)} min</b> when late · Safest day: <b style={{ color:"#16a34a" }}>{bestDay}</b></div>
         </div>
+      </div>
+
+      <div style={{ marginTop:10, padding:"8px 12px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:8, fontSize:11, color:"#15803d" }}>
+        ✓ {s.dataNote}
       </div>
     </div>
   );
