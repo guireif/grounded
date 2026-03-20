@@ -1,28 +1,53 @@
 export default async function handler(req, res) {
   const { carrier, flightNum, origin, dest } = req.query;
 
-  if (!carrier || !flightNum) {
-    return res.status(400).json({ error: "carrier and flightNum required" });
+  if (!flightNum) {
+    return res.status(400).json({ error: "flightNum required" });
   }
 
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  const headers = {
+    "apikey":        supabaseKey,
+    "Authorization": `Bearer ${supabaseKey}`,
+    "Content-Type":  "application/json",
+  };
+
   try {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    let rows = [];
+    let usedCarrier = carrier;
 
-    // Build query URL
-    let url = `${supabaseUrl}/rest/v1/flight_stats?carrier=eq.${carrier}&flight_num=eq.${flightNum}&select=*&limit=2000`;
-    if (origin) url += `&origin=eq.${origin}`;
-    if (dest)   url += `&dest=eq.${dest}`;
+    // Try 1: exact carrier + flight number + route
+    if (carrier) {
+      let url = `${supabaseUrl}/rest/v1/flight_stats?carrier=eq.${carrier}&flight_num=eq.${flightNum}&select=*&limit=2000`;
+      if (origin) url += `&origin=eq.${origin}`;
+      if (dest)   url += `&dest=eq.${dest}`;
+      const r = await fetch(url, { headers });
+      rows = await r.json();
+    }
 
-    const response = await fetch(url, {
-      headers: {
-        "apikey":        supabaseKey,
-        "Authorization": `Bearer ${supabaseKey}`,
-        "Content-Type":  "application/json",
-      },
-    });
+    // Try 2: just flight number (catches regional/codeshare flights)
+    if (!rows || rows.length === 0) {
+      let url = `${supabaseUrl}/rest/v1/flight_stats?flight_num=eq.${flightNum}&select=*&limit=2000`;
+      if (origin) url += `&origin=eq.${origin}`;
+      if (dest)   url += `&dest=eq.${dest}`;
+      const r = await fetch(url, { headers });
+      rows = await r.json();
+      // Note the actual carrier found
+      if (rows && rows.length > 0) {
+        usedCarrier = rows[0].carrier;
+      }
+    }
 
-    const rows = await response.json();
+    // Try 3: just flight number, no route filter
+    if (!rows || rows.length === 0) {
+      const url = `${supabaseUrl}/rest/v1/flight_stats?flight_num=eq.${flightNum}&select=*&limit=2000`;
+      const r = await fetch(url, { headers });
+      rows = await r.json();
+      if (rows && rows.length > 0) {
+        usedCarrier = rows[0].carrier;
+      }
+    }
 
     if (!rows || rows.length === 0) {
       return res.status(404).json({ error: "No historical data found for this flight" });
@@ -34,52 +59,45 @@ export default async function handler(req, res) {
     const delayed   = flown.filter(r => r.arr_delay > 0);
     const onTime    = flown.filter(r => r.arr_delay <= 0);
 
-    // Average delay when delayed
     const avgDelay = delayed.length > 0
       ? delayed.reduce((sum, r) => sum + (r.arr_delay || 0), 0) / delayed.length
       : 0;
 
-    // Delay distribution buckets
     const histogram = [
-      { label:"On time",  count: onTime.length,                                       color:"#16a34a" },
-      { label:"1–15m",    count: flown.filter(r => r.arr_delay > 0  && r.arr_delay <= 15).length,  color:"#65a30d" },
-      { label:"15–30m",   count: flown.filter(r => r.arr_delay > 15 && r.arr_delay <= 30).length,  color:"#d97706" },
-      { label:"30–60m",   count: flown.filter(r => r.arr_delay > 30 && r.arr_delay <= 60).length,  color:"#ea580c" },
-      { label:"1–2hrs",   count: flown.filter(r => r.arr_delay > 60 && r.arr_delay <= 120).length, color:"#dc2626" },
-      { label:"2+hrs",    count: flown.filter(r => r.arr_delay > 120).length,                      color:"#9f1239" },
+      { label:"On time", count: onTime.length,                                                        color:"#16a34a" },
+      { label:"1–15m",   count: flown.filter(r => r.arr_delay > 0   && r.arr_delay <= 15).length,   color:"#65a30d" },
+      { label:"15–30m",  count: flown.filter(r => r.arr_delay > 15  && r.arr_delay <= 30).length,   color:"#d97706" },
+      { label:"30–60m",  count: flown.filter(r => r.arr_delay > 30  && r.arr_delay <= 60).length,   color:"#ea580c" },
+      { label:"1–2hrs",  count: flown.filter(r => r.arr_delay > 60  && r.arr_delay <= 120).length,  color:"#dc2626" },
+      { label:"2+hrs",   count: flown.filter(r => r.arr_delay > 120).length,                        color:"#9f1239" },
     ];
 
-    // By day of week (1=Mon, 7=Sun in BTS data)
     const dayNames = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
     const byDay = dayNames.map((day, i) => {
       const dayRows  = flown.filter(r => r.day_of_week === i + 1);
       const dayDelay = dayRows.filter(r => r.arr_delay > 0);
-      return {
-        day,
-        delayRate: dayRows.length > 0 ? dayDelay.length / dayRows.length : 0,
-      };
+      return { day, delayRate: dayRows.length > 0 ? dayDelay.length / dayRows.length : 0 };
     });
 
-    // By month
     const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const byMonth = monthNames.map((month, i) => {
       const mRows  = flown.filter(r => r.month === i + 1);
       const mDelay = mRows.filter(r => r.arr_delay > 0);
-      return {
-        month,
-        delayRate: mRows.length > 0 ? mDelay.length / mRows.length : 0,
-      };
+      return { month, delayRate: mRows.length > 0 ? mDelay.length / mRows.length : 0 };
     });
 
-    // Delay causes (sum across all delayed flights)
-    const causeTotal = delayed.length;
     const causes = [
       { name:"Late Aircraft", value: delayed.filter(r => (r.late_aircraft_delay || 0) > 0).length, color:"#ea580c" },
-      { name:"Carrier",       value: delayed.filter(r => (r.carrier_delay || 0) > 0).length,       color:"#dc2626" },
-      { name:"NAS/ATC",       value: delayed.filter(r => (r.nas_delay || 0) > 0).length,           color:"#d97706" },
-      { name:"Weather",       value: delayed.filter(r => (r.weather_delay || 0) > 0).length,       color:"#2563eb" },
-      { name:"Security",      value: delayed.filter(r => (r.security_delay || 0) > 0).length,      color:"#7c3aed" },
+      { name:"Carrier",       value: delayed.filter(r => (r.carrier_delay       || 0) > 0).length, color:"#dc2626" },
+      { name:"NAS/ATC",       value: delayed.filter(r => (r.nas_delay           || 0) > 0).length, color:"#d97706" },
+      { name:"Weather",       value: delayed.filter(r => (r.weather_delay       || 0) > 0).length, color:"#2563eb" },
+      { name:"Security",      value: delayed.filter(r => (r.security_delay      || 0) > 0).length, color:"#7c3aed" },
     ].filter(c => c.value > 0);
+
+    // Note if we had to use a different carrier
+    const carrierNote = usedCarrier && carrier && usedCarrier !== carrier
+      ? ` · Operated by ${usedCarrier} (not ${carrier})`
+      : "";
 
     return res.status(200).json({
       total,
@@ -91,7 +109,8 @@ export default async function handler(req, res) {
       byDay,
       byMonth,
       causes,
-      dataNote:    "Based on BTS On-Time Performance data · Nov 2025",
+      actualCarrier: usedCarrier,
+      dataNote: `BTS On-Time Performance data · Nov 2025${carrierNote}`,
     });
 
   } catch (error) {
