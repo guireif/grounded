@@ -9,7 +9,7 @@ export default async function handler(req, res) {
       const query = q.replace(" ", "").toUpperCase();
   
       const response = await fetch(
-        `http://api.aviationstack.com/v1/flights?access_key=${process.env.AVIATIONSTACK_KEY}&flight_iata=${query}&limit=5`
+        `http://api.aviationstack.com/v1/flights?access_key=${process.env.AVIATIONSTACK_KEY}&flight_iata=${query}&limit=10`
       );
       const data = await response.json();
   
@@ -17,14 +17,34 @@ export default async function handler(req, res) {
         return res.status(200).json({ results: [] });
       }
   
-      const results = data.data.map(f => ({
-        flight:   f.flight?.iata,
-        airline:  f.airline?.name,
-        from:     f.departure?.iata,
-        to:       f.arrival?.iata,
-        route:    `${f.departure?.iata} → ${f.arrival?.iata}`,
-        status:   f.flight_status,
-      })).filter(f => f.flight && f.from && f.to);
+      // Deduplicate by flight number only — keep first occurrence
+      const seen = new Set();
+      const results = [];
+  
+      for (const f of data.data) {
+        const iata = f.flight?.iata;
+  
+        // Must have a full flight number (e.g. AA925, not just AA)
+        if (!iata || iata.length < 3) continue;
+  
+        // Must have both airports
+        if (!f.departure?.iata || !f.arrival?.iata) continue;
+  
+        // Skip duplicates
+        if (seen.has(iata)) continue;
+        seen.add(iata);
+  
+        results.push({
+          flight:  iata,
+          airline: f.airline?.name || "",
+          from:    f.departure.iata,
+          to:      f.arrival.iata,
+          route:   `${f.departure.iata} → ${f.arrival.iata}`,
+          status:  f.flight_status,
+        });
+  
+        if (results.length >= 5) break;
+      }
   
       return res.status(200).json({ results });
   

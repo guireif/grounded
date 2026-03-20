@@ -530,9 +530,9 @@ function HistoryPage({ fk }) {
     setError(null);
 
     // Parse "AA 100" → carrier="AA", flightNum="100"
-    const parts     = fk.trim().split(" ");
-    const carrier   = parts[0];
-    const flightNum = parts.slice(1).join("");
+    const match     = fk.trim().match(/^([A-Z]{2,3})\s*(\d+)$/);
+    const carrier   = match ? match[1] : fk.replace(/\d/g, "");
+    const flightNum = match ? match[2] : fk.replace(/\D/g, "");
 
     let url = `/api/history?carrier=${carrier}&flightNum=${flightNum}`;
     if (meta?.from) url += `&origin=${meta.from}`;
