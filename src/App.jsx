@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  LineChart, Line, CartesianGrid, Cell, PieChart, Pie,
+  LineChart, Line, CartesianGrid, Cell, PieChart, Pie, ComposedChart,
 } from "recharts";
 
 // ─── AIRPORT LAT/LNG DATABASE ─────────────────────────────────────────────────
@@ -447,7 +447,7 @@ function LivePage({ fk }) {
   const depSched   = fmtTime(liveData.departure?.scheduled) || "—";
   const arrEst     = fmtTime(liveData.arrival?.estimated || liveData.arrival?.scheduled) || "—";
   const arrSched   = fmtTime(liveData.arrival?.scheduled)   || "—";
-  const gate       = liveData.departure?.gate || liveData.departure?.terminal || "—";
+  const gate       = liveData.departure?.gate || (liveData.departure?.terminal ?  : "—");
   const fromIata   = liveData.departure?.iata || meta?.from || "—";
   const toIata     = liveData.arrival?.iata   || meta?.to   || "—";
   const progress   = calcProgress(liveData.departure?.scheduled, liveData.arrival?.scheduled, apiStatus);
@@ -518,15 +518,17 @@ function LivePage({ fk }) {
 // ─── HISTORY PAGE ─────────────────────────────────────────────────────────────
 
 function HistoryPage({ fk }) {
-  const [tab, setTab]       = useState("dist");
-  const [stats, setStats]   = useState(null);
+  const [tab, setTab]         = useState("dist");
+  const [selMonth, setSelMonth] = useState(null);
+  const [stats, setStats]     = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
+  const [error, setError]     = useState(null);
   const meta = FLIGHTS[fk];
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setSelMonth(null);
     const match     = fk.trim().match(/^([A-Z]{2,3})\s*(\d+)$/);
     const carrier   = match ? match[1] : fk.replace(/\d/g, "");
     const flightNum = match ? match[2] : fk.replace(/\D/g, "");
@@ -563,12 +565,11 @@ function HistoryPage({ fk }) {
   const fmtPct = v => `${(v * 100).toFixed(1)}%`;
   const fmtMin = v => `${Math.round(v)}m`;
 
-  // Custom tooltip for dual-axis day/month charts
   const DualTT = ({ active, payload, label }) => active && payload?.length ? (
     <div style={{ background:"#fff", border:"1px solid #e8e6de", padding:"8px 12px", borderRadius:8, fontSize:12, boxShadow:"0 2px 8px rgba(0,0,0,0.08)" }}>
       <div style={{ color:"#94a3b8", marginBottom:4, fontWeight:600 }}>{label}</div>
       {payload.map((p, i) => (
-        <div key={i} style={{ color:p.color, marginBottom:2 }}>
+        <div key={i} style={{ color:p.color || "#c2820a", marginBottom:2 }}>
           {p.name}: {p.name === "Delay Rate" ? fmtPct(p.value) : `${p.value}m avg`}
         </div>
       ))}
@@ -577,7 +578,7 @@ function HistoryPage({ fk }) {
 
   return (
     <div>
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:10, marginBottom:16 }}>
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
@@ -594,15 +595,15 @@ function HistoryPage({ fk }) {
         </div>
       </div>
 
-      {/* ── Stat cards ── */}
+      {/* Stat cards */}
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <StatCard label="On-Time"       value={fmtPct(s.onTimeRate)}   sub={`${s.total} flights`}        color="#16a34a"/>
-        <StatCard label=">15min delay"  value={fmtPct(s.sigDelayRate)} sub="Significant delays"          color={riskColor}/>
-        <StatCard label="Avg delay"     value={fmtMin(s.avgSigDelay)}  sub="When significantly late"     color="#c2820a"/>
-        <StatCard label="Cancels"       value={fmtPct(s.cancelRate)}   sub="Historical avg"              color="#7c3aed"/>
+        <StatCard label="On-Time"      value={fmtPct(s.onTimeRate)}    sub={`${s.total} flights`}           color="#16a34a"/>
+        <StatCard label=">15min delay" value={fmtPct(s.sigDelayRate)}  sub="Significant delays"             color={riskColor}/>
+        <StatCard label="Typical delay" value={fmtMin(s.medianSigDelay)} sub={`avg ${fmtMin(s.avgSigDelay)} (capped 3h)`} color="#c2820a"/>
+        <StatCard label="Cancels"      value={fmtPct(s.cancelRate)}    sub="Historical avg"                 color="#7c3aed"/>
       </div>
 
-      {/* ── Confidence box ── */}
+      {/* Confidence box */}
       <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
         <div style={{ fontSize:11, color:"#92400e", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:10 }}>Delay Confidence</div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -619,57 +620,57 @@ function HistoryPage({ fk }) {
           ))}
         </div>
         <div style={{ fontSize:11, color:"#92400e", marginTop:10 }}>
-          e.g. 80% of the time this flight arrives within <b>+{s.p80 <= 0 ? "0" : s.p80} min</b> of schedule
+          Typical delay when late: <b>+{s.medianSigDelay}m</b> (median) · 80% of flights arrive within <b>+{s.p80 <= 0 ? 0 : s.p80}m</b>
         </div>
       </div>
 
-      {/* ── Tabs ── */}
+      {/* Tabs */}
       <div style={{ display:"flex", gap:2, borderBottom:"2px solid #f1f5f9", marginBottom:16, overflowX:"auto" }}>
-        {[["dist","Distribution"],["prob","Probability"],["day","By Weekday"],["mo","By Month"],["cause","Why?"]].map(([k, l]) => (
+        {[["dist","Distribution"],["prob","Probability"],["day","By Weekday"],["mo","By Month"],["trend","Trend"],["cause","Why?"]].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding:"7px 12px", fontSize:12, fontWeight:tab === k ? 600 : 400, color:tab === k ? "#c2820a" : "#94a3b8", borderBottom:`2px solid ${tab === k ? "#f59e0b" : "transparent"}`, marginBottom:-2, background:"none", border:"none", cursor:"pointer", whiteSpace:"nowrap" }}>{l}</button>
         ))}
       </div>
 
-      {/* ── Distribution ── */}
+      {/* Distribution */}
       {tab === "dist" && (
         <div>
-          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Out of {s.flown} flights, here's how late they got:</p>
+          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Out of {s.flown} flights, here is how late they got:</p>
           <ResponsiveContainer width="100%" height={210}>
             <BarChart data={s.histogram} barCategoryGap="15%">
               <CartesianGrid vertical={false} stroke="#f1f5f9"/>
               <XAxis dataKey="label" tick={{ fill:"#94a3b8", fontSize:11 }} axisLine={false} tickLine={false}/>
               <YAxis tickFormatter={v => `${(v*100).toFixed(0)}%`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
-              <Tooltip formatter={(v, n) => [fmtPct(v), "Share"]} contentStyle={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:8, fontSize:11 }}/>
+              <Tooltip formatter={(v) => [`${(v*100).toFixed(1)}%`, "Share"]} contentStyle={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:8, fontSize:11 }}/>
               <Bar dataKey="pct" name="Share" radius={[4,4,0,0]}>
                 {s.histogram.map((e, i) => <Cell key={i} fill={e.color}/>)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
           <p style={{ fontSize:11, color:"#94a3b8", marginTop:8 }}>
-            Minor delays (1–15m): <b style={{ color:"#65a30d" }}>{fmtPct(s.histogram[1]?.pct || 0)}</b> of flights — not counted in risk score
+            Minor delays (1-15m): <b style={{ color:"#65a30d" }}>{fmtPct(s.histogram[1]?.pct || 0)}</b> of flights — not counted in risk score
           </p>
         </div>
       )}
 
-      {/* ── Probability curve ── */}
+      {/* Probability distribution */}
       {tab === "prob" && (
         <div>
-          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Probability of arriving at each delay level — the earlier the peak, the better.</p>
+          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Probability of arriving at each delay level. Earlier peak = better flight.</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={s.distribution} barCategoryGap="5%">
               <CartesianGrid vertical={false} stroke="#f1f5f9"/>
               <XAxis dataKey="label" tick={{ fill:"#94a3b8", fontSize:9 }} axisLine={false} tickLine={false} interval={1}/>
               <YAxis tickFormatter={v => `${(v*100).toFixed(0)}%`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
-              <Tooltip formatter={(v) => [fmtPct(v), "Probability"]} contentStyle={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:8, fontSize:11 }}/>
+              <Tooltip formatter={(v) => [`${(v*100).toFixed(1)}%`, "Probability"]} contentStyle={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:8, fontSize:11 }}/>
               <Bar dataKey="pct" name="Probability" radius={[3,3,0,0]}>
                 {s.distribution.map((d, i) => (
-                  <Cell key={i} fill={d.start < 0 ? "#16a34a" : d.start === 0 ? "#65a30d" : d.start <= 15 ? "#d97706" : d.start <= 30 ? "#ea580c" : "#dc2626"}/>
+                  <Cell key={i} fill={d.start < 0 ? "#2563eb" : d.start === 0 ? "#16a34a" : d.start <= 15 ? "#65a30d" : d.start <= 30 ? "#d97706" : d.start <= 60 ? "#ea580c" : "#dc2626"}/>
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
           <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
-            {[["#16a34a","Early"],["#65a30d","On time"],["#d97706","Minor"],["#ea580c","Significant"],["#dc2626","Severe"]].map(([c, l]) => (
+            {[["#2563eb","Early"],["#16a34a","On time"],["#65a30d","1-15m"],["#d97706","15-30m"],["#ea580c","30-60m"],["#dc2626","60m+"]].map(([c, l]) => (
               <div key={l} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"#64748b" }}>
                 <div style={{ width:10, height:10, borderRadius:2, background:c }}/>
                 {l}
@@ -679,12 +680,12 @@ function HistoryPage({ fk }) {
         </div>
       )}
 
-      {/* ── By weekday ── */}
+      {/* By weekday */}
       {tab === "day" && (
         <div>
-          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Delay frequency (%) and average delay (min) when significantly late, by day of week.</p>
+          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Delay frequency and average delay by day of week (delays over 15 min only).</p>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={s.byDay} barCategoryGap="25%" barGap={4}>
+            <BarChart data={s.byDay} barCategoryGap="20%" barGap={4}>
               <CartesianGrid vertical={false} stroke="#f1f5f9"/>
               <XAxis dataKey="day" tick={{ fill:"#94a3b8", fontSize:12 }} axisLine={false} tickLine={false}/>
               <YAxis yAxisId="left"  tickFormatter={v => `${(v*100).toFixed(0)}%`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
@@ -699,35 +700,117 @@ function HistoryPage({ fk }) {
           <p style={{ fontSize:12, color:"#64748b", marginTop:10 }}>
             Best day: <b style={{ color:"#16a34a" }}>{bestDay}</b> · Worst day: <b style={{ color:"#dc2626" }}>{worstDay}</b>
           </p>
-        </div>
-      )}
-
-      {/* ── By month ── */}
-      {tab === "mo" && (
-        <div>
-          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Delay frequency and average delay per month. Only months with data are shown.</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={s.byMonth.filter(m => m.flights > 0)}>
-              <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3"/>
-              <XAxis dataKey="month" tick={{ fill:"#94a3b8", fontSize:11 }} axisLine={false} tickLine={false}/>
-              <YAxis yAxisId="left"  tickFormatter={v => `${(v*100).toFixed(0)}%`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
-              <YAxis yAxisId="right" orientation="right" tickFormatter={v => `${v}m`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
-              <Tooltip content={<DualTT/>}/>
-              <Line yAxisId="left"  type="monotone" dataKey="delayRate" name="Delay Rate" stroke="#f59e0b" strokeWidth={2.5} dot={{ fill:"#f59e0b", r:3, strokeWidth:0 }}/>
-              <Line yAxisId="right" type="monotone" dataKey="avgDelay"  name="Avg Delay"  stroke="#94a3b8" strokeWidth={1.5} dot={{ fill:"#94a3b8", r:3, strokeWidth:0 }} strokeDasharray="4 3"/>
-            </LineChart>
-          </ResponsiveContainer>
-          <div style={{ display:"flex", gap:16, marginTop:8, fontSize:11, color:"#64748b" }}>
-            <span style={{ color:"#b45309" }}>— Delay frequency (%)</span>
-            <span style={{ color:"#94a3b8" }}>- - Avg delay (min)</span>
+          <div style={{ display:"flex", gap:16, marginTop:4, fontSize:11, color:"#64748b" }}>
+            <span style={{ color:"#b45309" }}>■ Delay frequency (%)</span>
+            <span style={{ color:"#d97706" }}>■ Avg delay (min)</span>
           </div>
         </div>
       )}
 
-      {/* ── Causes ── */}
+      {/* By month — click to drill into daily breakdown */}
+      {tab === "mo" && (() => {
+        const months = s.byMonth.filter(m => m.flights > 0);
+        const active = selMonth ? months.find(m => m.month === selMonth) : null;
+        return (
+          <div>
+            <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>
+              {active ? `${active.month} — breakdown by day of week` : "Click a month bar to see daily breakdown"}
+            </p>
+            {!active ? (
+              <div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={months} barCategoryGap="20%" barGap={4}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9"/>
+                    <XAxis dataKey="month" tick={{ fill:"#94a3b8", fontSize:11 }} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="left"  tickFormatter={v => `${(v*100).toFixed(0)}%`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={v => `${v}m`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                    <Tooltip content={<DualTT/>}/>
+                    <Bar yAxisId="left"  dataKey="delayRate" name="Delay Rate" radius={[4,4,0,0]} onClick={d => setSelMonth(d.month)} style={{ cursor:"pointer" }}>
+                      {months.map((m, i) => <Cell key={i} fill={rc(m.delayRate)}/>)}
+                    </Bar>
+                    <Bar yAxisId="right" dataKey="avgDelay"  name="Avg Delay"  radius={[4,4,0,0]} fill="#fbbf24" opacity={0.7} onClick={d => setSelMonth(d.month)} style={{ cursor:"pointer" }}/>
+                  </BarChart>
+                </ResponsiveContainer>
+                <p style={{ fontSize:11, color:"#94a3b8", marginTop:8 }}>Click a bar to drill into that month</p>
+                <div style={{ display:"flex", gap:16, marginTop:4, fontSize:11, color:"#64748b" }}>
+                  <span style={{ color:"#b45309" }}>■ Delay frequency (%)</span>
+                  <span style={{ color:"#d97706" }}>■ Avg delay (min)</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <button onClick={() => setSelMonth(null)} style={{ fontSize:11, color:"#2563eb", background:"none", border:"none", cursor:"pointer", marginBottom:10, padding:0 }}>← Back to all months</button>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={active.byDay} barCategoryGap="20%" barGap={4}>
+                    <CartesianGrid vertical={false} stroke="#f1f5f9"/>
+                    <XAxis dataKey="day" tick={{ fill:"#94a3b8", fontSize:12 }} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="left"  tickFormatter={v => `${(v*100).toFixed(0)}%`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={v => `${v}m`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
+                    <Tooltip content={<DualTT/>}/>
+                    <Bar yAxisId="left"  dataKey="delayRate" name="Delay Rate" radius={[4,4,0,0]}>
+                      {active.byDay.map((d, i) => <Cell key={i} fill={rc(d.delayRate)}/>)}
+                    </Bar>
+                    <Bar yAxisId="right" dataKey="avgDelay"  name="Avg Delay"  radius={[4,4,0,0]} fill="#fbbf24" opacity={0.7}/>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div style={{ display:"flex", gap:16, marginTop:8, fontSize:11, color:"#64748b" }}>
+                  <span style={{ color:"#b45309" }}>■ Delay frequency (%)</span>
+                  <span style={{ color:"#d97706" }}>■ Avg delay (min)</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Trend */}
+      {tab === "trend" && (
+        <div>
+          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>
+            Last {s.trend.length} departures — bars show delay per flight, dashed line is rolling average.
+          </p>
+          <ResponsiveContainer width="100%" height={230}>
+            <ComposedChart data={s.trend} barCategoryGap="10%">
+              <CartesianGrid vertical={false} stroke="#f1f5f9"/>
+              <XAxis dataKey="idx" tick={false} axisLine={false} tickLine={false}/>
+              <YAxis tickFormatter={v => `${v}m`} tick={{ fill:"#94a3b8", fontSize:10 }} axisLine={false} tickLine={false}/>
+              <Tooltip
+                content={({ active, payload }) => active && payload?.length ? (
+                  <div style={{ background:"#fff", border:"1px solid #e8e6de", padding:"8px 12px", borderRadius:8, fontSize:11 }}>
+                    <div style={{ color:"#94a3b8", marginBottom:3 }}>{payload[0]?.payload?.day}, {payload[0]?.payload?.month}</div>
+                    <div style={{ color: (payload[0]?.payload?.delay||0) > 30 ? "#dc2626" : (payload[0]?.payload?.delay||0) > 15 ? "#ea580c" : (payload[0]?.payload?.delay||0) > 0 ? "#d97706" : "#16a34a", fontWeight:600 }}>
+                      {(payload[0]?.payload?.delay||0) <= 0 ? `${Math.abs(payload[0]?.payload?.delay||0)}m early` : `+${payload[0]?.payload?.delay}m`}
+                    </div>
+                    <div style={{ color:"#64748b", marginTop:2 }}>Rolling avg: {payload[1]?.value}m</div>
+                  </div>
+                ) : null}
+              />
+              <Bar dataKey="delay" name="Delay" radius={[3,3,0,0]}>
+                {s.trend.map((t, i) => (
+                  <Cell key={i} fill={t.delay > 30 ? "#dc2626" : t.delay > 15 ? "#ea580c" : t.delay > 0 ? "#d97706" : t.delay > -10 ? "#16a34a" : "#2563eb"}/>
+                ))}
+              </Bar>
+              <Line type="monotone" dataKey="rollingAvg" name="Rolling avg" stroke="#94a3b8" strokeWidth={2} dot={false} strokeDasharray="4 2"/>
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div style={{ display:"flex", gap:10, marginTop:10, flexWrap:"wrap" }}>
+            {[["#2563eb","Early"],["#16a34a","On time"],["#d97706","1-15m"],["#ea580c","15-30m"],["#dc2626","30m+"]].map(([c,l]) => (
+              <div key={l} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"#64748b" }}>
+                <div style={{ width:10, height:10, borderRadius:2, background:c }}/>
+                {l}
+              </div>
+            ))}
+          </div>
+          <p style={{ fontSize:11, color:"#94a3b8", marginTop:8 }}>
+            BTS data has no exact dates — flights sorted by month then day of week as approximation.
+          </p>
+        </div>
+      )}
+
+      {/* Causes */}
       {tab === "cause" && s.causes.length > 0 && (
         <div>
-          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Here's who to blame when this flight is significantly late.</p>
+          <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Here is who to blame when this flight is significantly late.</p>
           <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
             <div style={{ width:180, height:180 }}>
               <ResponsiveContainer width="100%" height="100%">
@@ -741,8 +824,8 @@ function HistoryPage({ fk }) {
             </div>
             <div style={{ flex:1, minWidth:140 }}>
               {s.causes.map((c, i) => {
-                const total = s.causes.reduce((a, x) => a + x.value, 0);
-                const p = total ? ((c.value / total) * 100).toFixed(1) : 0;
+                const tot = s.causes.reduce((a, x) => a + x.value, 0);
+                const p   = tot ? ((c.value / tot) * 100).toFixed(1) : 0;
                 return (
                   <div key={i} style={{ marginBottom:10 }}>
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:3 }}>
@@ -760,7 +843,7 @@ function HistoryPage({ fk }) {
         </div>
       )}
 
-      {/* ── Data note ── */}
+      {/* Data note */}
       <div style={{ marginTop:16, padding:"8px 12px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:8, fontSize:11, color:"#15803d" }}>
         ✓ {s.dataNote}
       </div>
@@ -768,7 +851,6 @@ function HistoryPage({ fk }) {
   );
 }
 
-// ─── ALTERNATIVES PAGE ────────────────────────────────────────────────────────
 
 const BADGE_STYLES = {
   "Fastest":       { bg:"#f0fdf4", bc:"#86efac", c:"#15803d" },
