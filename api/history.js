@@ -66,6 +66,7 @@ export default async function handler(req, res) {
       { label:"2+hrs",   count:d120p.length,   pct: n > 0 ? d120p.length/n   : 0, color:"#9f1239" },
     ];
 
+    // Weighted risk score — minor delays barely count
     const weightedScore = n > 0
       ? (d1_15.length*0.3 + d15_30.length*0.7 + d30_60.length*1.0 + d60_120.length*1.5 + d120p.length*2.0) / n
       : 0;
@@ -74,26 +75,22 @@ export default async function handler(req, res) {
     const sigDelayRate = n > 0 ? sigDelayed.length / n : 0;
     const delayed      = flown.filter(r => (r.arr_delay || 0) > 0);
 
-    // Avg capped at 180min to avoid outliers skewing it
-    const avgDelay = delayed.length > 0
-      ? delayed.map(r => Math.min(r.arr_delay || 0, 180)).reduce((s, v) => s + v, 0) / delayed.length
-      : 0;
-
+    // Avg significant delay — capped at 180min to reduce outlier impact
     const avgSigDelay = sigDelayed.length > 0
       ? sigDelayed.map(r => Math.min(r.arr_delay || 0, 180)).reduce((s, v) => s + v, 0) / sigDelayed.length
       : 0;
 
-    // Median significant delay (more robust than mean)
-    const sigDelaysSorted = sigDelayed.map(r => r.arr_delay || 0).sort((a, b) => a - b);
-    const medianSigDelay  = sigDelaysSorted.length > 0
-      ? sigDelaysSorted[Math.floor(sigDelaysSorted.length / 2)]
+    // Typical experience = median across ALL flights (on-time + delayed)
+    // If most flights are on time, this will be 0 or negative (early)
+    const allFlownSorted = flown.map(r => r.arr_delay || 0).sort((a, b) => a - b);
+    const typicalDelay   = allFlownSorted.length > 0
+      ? allFlownSorted[Math.floor(allFlownSorted.length / 2)]
       : 0;
 
-    // Percentiles
-    const allDelays = flown.map(r => r.arr_delay || 0).sort((a, b) => a - b);
-    const p50 = allDelays[Math.floor(allDelays.length * 0.50)] || 0;
-    const p80 = allDelays[Math.floor(allDelays.length * 0.80)] || 0;
-    const p95 = allDelays[Math.floor(allDelays.length * 0.95)] || 0;
+    // Percentiles across all flights
+    const p50 = allFlownSorted[Math.floor(allFlownSorted.length * 0.50)] || 0;
+    const p80 = allFlownSorted[Math.floor(allFlownSorted.length * 0.80)] || 0;
+    const p95 = allFlownSorted[Math.floor(allFlownSorted.length * 0.95)] || 0;
 
     // By weekday
     const dayNames = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
@@ -103,7 +100,12 @@ export default async function handler(req, res) {
       const dayAvg     = dayDelayed.length > 0
         ? dayDelayed.map(r => Math.min(r.arr_delay||0, 180)).reduce((s,v) => s+v, 0) / dayDelayed.length
         : 0;
-      return { day, delayRate: dayRows.length > 0 ? dayDelayed.length/dayRows.length : 0, avgDelay: Math.round(dayAvg), flights: dayRows.length };
+      return {
+        day,
+        delayRate: dayRows.length > 0 ? dayDelayed.length / dayRows.length : 0,
+        avgDelay:  Math.round(dayAvg),
+        flights:   dayRows.length,
+      };
     });
 
     // By month with daily breakdown
@@ -120,12 +122,23 @@ export default async function handler(req, res) {
         const dAvg     = dDelayed.length > 0
           ? dDelayed.map(r => Math.min(r.arr_delay||0, 180)).reduce((s,v) => s+v, 0) / dDelayed.length
           : 0;
-        return { day, delayRate: dRows.length > 0 ? dDelayed.length/dRows.length : 0, avgDelay: Math.round(dAvg), flights: dRows.length };
+        return {
+          day,
+          delayRate: dRows.length > 0 ? dDelayed.length / dRows.length : 0,
+          avgDelay:  Math.round(dAvg),
+          flights:   dRows.length,
+        };
       }).filter(d => d.flights > 0);
-      return { month, delayRate: mRows.length > 0 ? mDelayed.length/mRows.length : 0, avgDelay: Math.round(mAvg), flights: mRows.length, byDay: byDayInMonth };
+      return {
+        month,
+        delayRate: mRows.length > 0 ? mDelayed.length / mRows.length : 0,
+        avgDelay:  Math.round(mAvg),
+        flights:   mRows.length,
+        byDay:     byDayInMonth,
+      };
     });
 
-    // Probability distribution (every 15 min from -30 to 180)
+    // Probability distribution — every 15 min from -30 to 180
     const distribution = [];
     for (let start = -30; start <= 165; start += 15) {
       const end   = start + 15;
@@ -134,25 +147,24 @@ export default async function handler(req, res) {
       distribution.push({ label, start, end, count, pct: n > 0 ? count/n : 0 });
     }
 
-    // Recent trend (last 60 flights approximated by month+day_of_week order)
+    // Recent trend — last 60 flights sorted by month then day_of_week
     const sorted = [...flown].sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
+      if (a.year  !== b.year)  return a.year  - b.year;
       if (a.month !== b.month) return a.month - b.month;
       return a.day_of_week - b.day_of_week;
     });
-    const recentN = Math.min(60, sorted.length);
+    const recentN  = Math.min(60, sorted.length);
     const trendRaw = sorted.slice(-recentN);
     const trend = trendRaw.map((r, i) => {
-      const delay = Math.round(r.arr_delay || 0);
+      const delay  = Math.round(r.arr_delay || 0);
       const window = trendRaw.slice(Math.max(0, i-4), i+5);
-      const avg = window.reduce((s, x) => s + (x.arr_delay||0), 0) / window.length;
+      const avg    = window.reduce((s, x) => s + (x.arr_delay||0), 0) / window.length;
       return {
-        idx: i + 1,
+        idx:        i + 1,
         delay,
         rollingAvg: Math.round(avg),
-        month: monthNames[(r.month||1)-1],
-        day:   dayNames[(r.day_of_week||1)-1],
-        onTime: delay <= 0,
+        month:      monthNames[(r.month||1)-1],
+        day:        dayNames[(r.day_of_week||1)-1],
       };
     });
 
@@ -169,14 +181,14 @@ export default async function handler(req, res) {
       ? ` · Operated by ${usedCarrier} (not ${carrier})` : "";
 
     return res.status(200).json({
-      total, flown: n,
-      onTimeRate:     n > 0 ? onTime.length/n : 0,
-      anyDelayRate:   n > 0 ? delayed.length/n : 0,
+      total,
+      flown:          n,
+      onTimeRate:     n > 0 ? onTime.length / n : 0,
+      anyDelayRate:   n > 0 ? delayed.length / n : 0,
       sigDelayRate,
-      cancelRate:     total > 0 ? cancelled/total : 0,
-      avgDelay:       Math.round(avgDelay),
+      cancelRate:     total > 0 ? cancelled / total : 0,
+      typicalDelay:   Math.round(typicalDelay),
       avgSigDelay:    Math.round(avgSigDelay),
-      medianSigDelay: Math.round(medianSigDelay),
       weightedScore,
       p50, p80, p95,
       histogram,
@@ -185,7 +197,7 @@ export default async function handler(req, res) {
       distribution,
       trend,
       causes,
-      actualCarrier: usedCarrier,
+      actualCarrier:  usedCarrier,
       dataNote: `BTS On-Time Performance data · Nov 2025${carrierNote}`,
     });
 

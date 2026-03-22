@@ -599,7 +599,7 @@ function HistoryPage({ fk }) {
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         <StatCard label="On-Time"      value={fmtPct(s.onTimeRate)}    sub={`${s.total} flights`}           color="#16a34a"/>
         <StatCard label=">15min delay" value={fmtPct(s.sigDelayRate)}  sub="Significant delays"             color={riskColor}/>
-        <StatCard label="Typical delay" value={fmtMin(s.medianSigDelay)} sub={`avg ${fmtMin(s.avgSigDelay)} (capped 3h)`} color="#c2820a"/>
+        <StatCard label="Typical exp." value={s.typicalDelay <= 0 ? "On time" : `+${s.typicalDelay}m`} sub={s.typicalDelay <= 0 ? "median passenger" : `when late: avg ${fmtMin(s.avgSigDelay)}`} color={s.typicalDelay <= 0 ? "#16a34a" : s.typicalDelay <= 15 ? "#d97706" : "#ea580c"}/>
         <StatCard label="Cancels"      value={fmtPct(s.cancelRate)}    sub="Historical avg"                 color="#7c3aed"/>
       </div>
 
@@ -620,7 +620,7 @@ function HistoryPage({ fk }) {
           ))}
         </div>
         <div style={{ fontSize:11, color:"#92400e", marginTop:10 }}>
-          Typical delay when late: <b>+{s.medianSigDelay}m</b> (median) · 80% of flights arrive within <b>+{s.p80 <= 0 ? 0 : s.p80}m</b>
+          Typical experience: <b>{s.typicalDelay <= 0 ? "on time or early" : `+${s.typicalDelay}m`}</b> · When it does delay: avg <b>+{s.avgSigDelay}m</b>
         </div>
       </div>
 
