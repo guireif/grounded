@@ -558,7 +558,7 @@ function LivePage({ fk }) {
                 <span>{inbound.message}</span>
               </div>
             </div>
-            {inbound.inbound?.flight && !inbound.isOurFlight && (
+            {inbound.inbound?.flight && (
               <div style={{ background:"#fff", border:`1px solid ${uc.border}`, borderRadius:8, padding:"6px 10px", textAlign:"center" }}>
                 <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>Inbound flight</div>
                 <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", fontFamily:"monospace" }}>{inbound.inbound.flight}</div>
@@ -567,7 +567,7 @@ function LivePage({ fk }) {
           </div>
 
           {/* Inbound route details */}
-          {inbound.inbound && !inbound.isOurFlight && (
+          {inbound.inbound && (
             <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
               <div style={{ background:"#fff", borderRadius:8, padding:"8px 12px", flex:1, minWidth:100, textAlign:"center" }}>
                 <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>From</div>
