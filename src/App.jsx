@@ -101,11 +101,14 @@ const pc  = ph =>
 
 function mapStatus(apiStatus, delayMin) {
   if (!apiStatus) return "Unknown";
-  if (apiStatus === "cancelled") return "Cancelled";
-  if (apiStatus === "landed")    return "Landed";
-  if (apiStatus === "active")    return delayMin > 0 ? "Delayed – In Flight" : "En Route";
-  if (apiStatus === "scheduled") return delayMin > 0 ? `Delayed – ${delayMin}m` : "Scheduled";
-  if (apiStatus === "incident")  return "Delayed";
+  const s = apiStatus.toLowerCase().replace(/[\s_-]/g, "");
+  if (s === "cancelled" || s === "canceled")         return "Cancelled";
+  if (s === "landed" || s === "arrived")              return "Landed";
+  if (s === "enroute" || s === "active" ||
+      s === "airborne" || s === "departed")           return delayMin > 0 ? "Delayed – In Flight" : "En Route";
+  if (s === "boarding")                               return "Boarding";
+  if (s === "scheduled" || s === "unknown")          return delayMin > 0 ? `Delayed – ${delayMin}m` : "Scheduled";
+  if (s === "incident" || s === "delayed")           return "Delayed";
   return apiStatus.charAt(0).toUpperCase() + apiStatus.slice(1);
 }
 
@@ -428,8 +431,11 @@ function LivePage({ fk }) {
         if (reg) {
           fetch(`/api/inbound?registration=${reg}&depIata=${dep || ""}`)
             .then(r => r.json())
-            .then(ib => { if (!ib.error) setInbound(ib); })
-            .catch(() => {});
+            .then(ib => {
+              if (!ib.error) setInbound(ib);
+              else console.warn("Inbound error:", ib.error, ib.debug);
+            })
+            .catch(e => console.warn("Inbound fetch failed:", e));
         }
       })
       .catch(err => setError(err.message))
