@@ -78,14 +78,14 @@ export default async function handler(req, res) {
       null;
 
     // Map status
-    const rawStatus = (inboundFlight.status || "").toLowerCase().replace(/\s+/g, "");
+    const rawStatus = (inboundFlight.status || "").toLowerCase();
     let phase = "scheduled";
-    if (rawStatus.includes("arrived") || rawStatus.includes("landed"))     phase = "landed";
-    else if (rawStatus.includes("enroute") || rawStatus.includes("airborne") ||
-             rawStatus.includes("departed") || rawStatus.includes("active")) phase = "enroute";
-    else if (rawStatus.includes("boarding"))                                  phase = "boarding";
-    else if (rawStatus.includes("cancel"))                                    phase = "cancelled";
-    else if (rawStatus.includes("delay"))                                     phase = "delayed";
+    if (rawStatus.includes("arrived") || rawStatus.includes("landed"))            phase = "landed";
+    else if (rawStatus.includes("en route") || rawStatus.includes("airborne") ||
+             rawStatus.includes("departed"))                                       phase = "enroute";
+    else if (rawStatus.includes("boarding"))                                       phase = "boarding";
+    else if (rawStatus.includes("cancel"))                                         phase = "cancelled";
+    else if (rawStatus.includes("delay"))                                          phase = "delayed";
 
     const fromIata = getIata(inboundFlight, "departure");
     const toIata   = getIata(inboundFlight, "arrival");

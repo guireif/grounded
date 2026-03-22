@@ -35,13 +35,14 @@ export default async function handler(req, res) {
     // ── Map status ──────────────────────────────────────────────────────────
     // AeroDataBox rawStatus can be: "Arrived", "En Route", "Departed",
     // "Boarding", "Scheduled", "Cancelled", "Delayed", "Unknown"
-    const raw = (f.status || "").toLowerCase();
+    const raw = (f.status || "").toLowerCase().replace(/[\s_-]/g, "");
     let status = "scheduled";
-    if (raw.includes("arrived") || raw.includes("landed"))        status = "landed";
-    else if (raw.includes("en route") || raw.includes("airborne") ||
-             raw.includes("departed"))                             status = "active";
-    else if (raw.includes("cancel"))                               status = "cancelled";
-    else if (raw.includes("delay") || raw.includes("boarding"))    status = "scheduled";
+    if (raw.includes("arrived") || raw.includes("landed"))         status = "landed";
+    else if (raw.includes("enroute") || raw.includes("airborne") ||
+             raw.includes("departed") || raw.includes("active"))   status = "active";
+    else if (raw.includes("cancel"))                                status = "cancelled";
+    else if (raw.includes("delay"))                                 status = "delayed";
+    else if (raw.includes("boarding"))                              status = "boarding";
 
     // ── Times ───────────────────────────────────────────────────────────────
     // AeroDataBox format: "2026-03-21 19:30-04:00" — parse to ISO
