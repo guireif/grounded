@@ -447,7 +447,7 @@ function LivePage({ fk }) {
   const depSched   = fmtTime(liveData.departure?.scheduled) || "—";
   const arrEst     = fmtTime(liveData.arrival?.estimated || liveData.arrival?.scheduled) || "—";
   const arrSched   = fmtTime(liveData.arrival?.scheduled)   || "—";
-  const gate       = liveData.departure?.gate || "—";
+  const gate = liveData.departure?.gate || liveData.departure?.terminal || "—";
   const fromIata   = liveData.departure?.iata || meta?.from || "—";
   const toIata     = liveData.arrival?.iata   || meta?.to   || "—";
   const progress   = calcProgress(liveData.departure?.scheduled, liveData.arrival?.scheduled, apiStatus);

@@ -6,7 +6,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get today's date in YYYY-MM-DD format
     const today = new Date().toISOString().split("T")[0];
 
     const response = await fetch(
@@ -20,62 +19,72 @@ export default async function handler(req, res) {
     );
 
     if (!response.ok) {
-      return res.status(404).json({ error: `Flight ${flight} not found` });
+      const errText = await response.text();
+      return res.status(404).json({ error: `Flight ${flight} not found`, detail: errText });
     }
 
     const data = await response.json();
-
-    // AeroDataBox returns an array of flights
     const flights = Array.isArray(data) ? data : [data];
+
     if (!flights.length) {
       return res.status(404).json({ error: "No flight data found" });
     }
 
     const f = flights[0];
 
-    // Map AeroDataBox response to our app's format
-    const depScheduled  = f.departure?.scheduledTime?.local  || f.departure?.scheduledTime?.utc;
-    const depActual     = f.departure?.actualTime?.local      || f.departure?.actualTime?.utc;
-    const arrScheduled  = f.arrival?.scheduledTime?.local     || f.arrival?.scheduledTime?.utc;
-    const arrEstimated  = f.arrival?.estimatedTime?.local     || f.arrival?.estimatedTime?.utc;
-    const depDelay      = f.departure?.delay || 0;
-    const arrDelay      = f.arrival?.delay   || 0;
-
-    // Map AeroDataBox status to our display status
-    const rawStatus = f.status || "Unknown";
+    // ── Map status ──────────────────────────────────────────────────────────
+    // AeroDataBox rawStatus can be: "Arrived", "En Route", "Departed",
+    // "Boarding", "Scheduled", "Cancelled", "Delayed", "Unknown"
+    const raw = (f.status || "").toLowerCase();
     let status = "scheduled";
-    if (rawStatus.toLowerCase().includes("landed"))    status = "landed";
-    if (rawStatus.toLowerCase().includes("en route") ||
-        rawStatus.toLowerCase().includes("airborne"))  status = "active";
-    if (rawStatus.toLowerCase().includes("cancel"))    status = "cancelled";
-    if (rawStatus.toLowerCase().includes("delay"))     status = "scheduled";
+    if (raw.includes("arrived") || raw.includes("landed"))        status = "landed";
+    else if (raw.includes("en route") || raw.includes("airborne") ||
+             raw.includes("departed"))                             status = "active";
+    else if (raw.includes("cancel"))                               status = "cancelled";
+    else if (raw.includes("delay") || raw.includes("boarding"))    status = "scheduled";
+
+    // ── Times ───────────────────────────────────────────────────────────────
+    // AeroDataBox format: "2026-03-21 19:30-04:00" — parse to ISO
+    const parseADBTime = t => {
+      if (!t) return null;
+      // Already ISO or close enough for Date parsing
+      try { return new Date(t).toISOString(); } catch { return null; }
+    };
+
+    const depScheduled = parseADBTime(f.departure?.scheduledTime?.local  || f.departure?.scheduledTime?.utc  || f.departure?.scheduled);
+    const depActual    = parseADBTime(f.departure?.actualTime?.local      || f.departure?.actualTime?.utc);
+    const arrScheduled = parseADBTime(f.arrival?.scheduledTime?.local     || f.arrival?.scheduledTime?.utc    || f.arrival?.scheduled);
+    const arrEstimated = parseADBTime(f.arrival?.estimatedTime?.local     || f.arrival?.estimatedTime?.utc    || f.arrival?.estimated);
+
+    const depDelay = f.departure?.delay || 0;
+    const arrDelay = f.arrival?.delay   || 0;
 
     return res.status(200).json({
       flight:   f.number || flight,
       airline:  f.airline?.name,
       status,
-      rawStatus,
+      rawStatus: f.status,
       departure: {
-        airport:   f.departure?.airport?.name,
-        iata:      f.departure?.airport?.iata,
+        airport:   f.departure?.airport?.name   || f.departure?.airport,
+        iata:      f.departure?.airport?.iata   || f.departure?.iata,
         scheduled: depScheduled,
         actual:    depActual,
         delay:     depDelay,
-        gate:      f.departure?.gate,
-        terminal:  f.departure?.terminal,
+        gate:      f.departure?.gate            || null,
+        terminal:  f.departure?.terminal        || null,
       },
       arrival: {
-        airport:   f.arrival?.airport?.name,
-        iata:      f.arrival?.airport?.iata,
+        airport:   f.arrival?.airport?.name     || f.arrival?.airport,
+        iata:      f.arrival?.airport?.iata     || f.arrival?.iata,
         scheduled: arrScheduled,
         estimated: arrEstimated,
         delay:     arrDelay,
-        gate:      f.arrival?.gate,
-        terminal:  f.arrival?.terminal,
+        gate:      f.arrival?.gate              || null,
+        terminal:  f.arrival?.terminal          || null,
       },
       aircraft: {
         model:        f.aircraft?.model,
-        registration: f.aircraft?.reg,
+        registration: f.aircraft?.reg || f.aircraft?.registration,
       },
     });
 
