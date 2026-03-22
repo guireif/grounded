@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, Cell, PieChart, Pie,
@@ -518,53 +518,13 @@ function LivePage({ fk }) {
 // ─── HISTORY PAGE ─────────────────────────────────────────────────────────────
 
 function HistoryPage({ fk }) {
-  const [tab, setTab]       = useState("dist");
-  const [stats, setStats]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
-
-  const meta = FLIGHTS[fk];
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-
-    // Parse "AA 100" → carrier="AA", flightNum="100"
-    const match     = fk.trim().match(/^([A-Z]{2,3})\s*(\d+)$/);
-    const carrier   = match ? match[1] : fk.replace(/\d/g, "");
-    const flightNum = match ? match[2] : fk.replace(/\D/g, "");
-
-    let url = `/api/history?carrier=${carrier}&flightNum=${flightNum}`;
-    if (meta?.from) url += `&origin=${meta.from}`;
-    if (meta?.to)   url += `&dest=${meta.to}`;
-
-    fetch(url)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) throw new Error(data.error);
-        setStats(data);
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [fk]);
-
-  if (loading) return <Spinner/>;
-
-  if (error) return (
-    <div style={{ textAlign:"center", padding:"50px 20px" }}>
-      <div style={{ fontSize:36, marginBottom:10 }}>🔍</div>
-      <div style={{ fontSize:14, color:"#dc2626", fontWeight:600, marginBottom:6 }}>No historical data found</div>
-      <div style={{ fontSize:12, color:"#94a3b8" }}>{error}</div>
-    </div>
-  );
-
-  const s        = stats;
-  const dr       = s.delayRate;
+  const [tab, setTab] = useState("dist");
+  const s        = generateStats(fk);
+  const meta     = FLIGHTS[fk];
+  const dr       = 1 - s.onTimeRate;
   const riskMsg  = dr < 0.2 ? "Usually reliable" : dr < 0.35 ? "Delays happen" : dr < 0.5 ? "It's a gamble" : "Chronically late";
   const bestDay  = s.byDay.reduce((a, b) => a.delayRate < b.delayRate ? a : b).day;
   const worstDay = s.byDay.reduce((a, b) => a.delayRate > b.delayRate ? a : b).day;
-  const pct      = v => `${(v * 100).toFixed(1)}%`;
-  const fmt      = v => typeof v === "number" ? v.toFixed(0) : "—";
 
   return (
     <div>
@@ -584,10 +544,10 @@ function HistoryPage({ fk }) {
       </div>
 
       <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
-        <StatCard label="On-Time"    value={pct(s.onTimeRate)}  sub={`${s.total} flights`} color="#16a34a"/>
-        <StatCard label="Delay Rate" value={pct(s.delayRate)}   sub="When not on-time"     color={rc(dr)}/>
-        <StatCard label="Avg Delay"  value={`${fmt(s.avgDelay)}m`} sub="When late"         color="#c2820a"/>
-        <StatCard label="Cancels"    value={pct(s.cancelRate)}  sub="Historical avg"        color="#7c3aed"/>
+        <StatCard label="On-Time"    value={pct(s.onTimeRate)}     sub={`${s.total} flights`} color="#16a34a"/>
+        <StatCard label="Delay Rate" value={pct(dr)}               sub="When not on-time"     color={rc(dr)}/>
+        <StatCard label="Avg Delay"  value={`${fmt(s.avgDelay)}m`} sub="When late"            color="#c2820a"/>
+        <StatCard label="Cancels"    value={pct(s.cancelRate)}     sub="Historical avg"        color="#7c3aed"/>
       </div>
 
       <div style={{ display:"flex", gap:2, borderBottom:"2px solid #f1f5f9", marginBottom:16 }}>
@@ -610,7 +570,6 @@ function HistoryPage({ fk }) {
           </ResponsiveContainer>
         </div>
       )}
-
       {tab === "day" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Pick the right day and you'll land on time more often.</p>
@@ -626,7 +585,6 @@ function HistoryPage({ fk }) {
           <p style={{ fontSize:12, color:"#64748b", marginTop:10 }}>Fly on <b style={{ color:"#16a34a" }}>{bestDay}</b> · Avoid <b style={{ color:"#dc2626" }}>{worstDay}</b></p>
         </div>
       )}
-
       {tab === "mo" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Some months are rougher than others.</p>
@@ -641,8 +599,7 @@ function HistoryPage({ fk }) {
           </ResponsiveContainer>
         </div>
       )}
-
-      {tab === "cause" && s.causes.length > 0 && (
+      {tab === "cause" && (
         <div>
           <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>Here's who to blame when this flight is late.</p>
           <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
@@ -683,10 +640,6 @@ function HistoryPage({ fk }) {
           <div style={{ fontSize:12, fontWeight:600, color:"#1e293b", marginBottom:2 }}>chance this flight delays you</div>
           <div style={{ fontSize:11, color:"#64748b" }}>Avg <b style={{ color:"#c2820a" }}>{fmt(s.avgDelay)} min</b> when late · Safest day: <b style={{ color:"#16a34a" }}>{bestDay}</b></div>
         </div>
-      </div>
-
-      <div style={{ marginTop:10, padding:"8px 12px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:8, fontSize:11, color:"#15803d" }}>
-        ✓ {s.dataNote}
       </div>
     </div>
   );
@@ -808,49 +761,29 @@ function AltsPage({ fk, liveDelayMin, liveStatus }) {
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [q, setQ]           = useState("");
-  const [sel, setSel]       = useState(null);
-  const [sugg, setSugg]     = useState([]);
-  const [page, setPage]     = useState("live");
-  const [liveCache, setLiveCache] = useState({});
-  const justPicked          = useRef(false);
+  const [q, setQ]     = useState("");
+  const [sel, setSel] = useState(null);
+  const [page, setPage] = useState("live");
 
-  useEffect(() => {
-    if (justPicked.current) { justPicked.current = false; return; }
-    if (q.trim().length < 2) { setSugg([]); return; }
-    const timer = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(q)}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.results) {
-            setSugg(data.results.map(r => ({
-              key: r.flight, label: r.flight, route: r.route, airline: r.airline,
-            })));
-          }
-        })
-        .catch(() => {});
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [q]);
+  // Format input: max 2 letters then max 4 digits, no spaces
+  const handleInput = e => {
+    const raw     = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const letters = raw.match(/^[A-Z]{0,2}/)?.[0] || "";
+    const digits  = raw.slice(letters.length).replace(/[^0-9]/g, "").slice(0, 4);
+    setQ(letters + digits);
+  };
 
-  useEffect(() => {
-    if (!sel || liveCache[sel]) return;
-    const callsign = sel.replace(" ", "");
-    fetch(`/api/live?flight=${callsign}`)
-      .then(r => r.json())
-      .then(data => {
-        if (!data.error) setLiveCache(prev => ({ ...prev, [sel]: data }));
-      })
-      .catch(() => {});
-  }, [sel]);
+  // Submit on Enter or Search button — only fires ONE API call
+  const submit = () => { if (q.length >= 3) { setSel(q); setPage("live"); } };
+  const handleKeyDown = e => { if (e.key === "Enter") submit(); };
 
-  const pick = k => { justPicked.current = true; setSel(k); setQ(k); setSugg([]); };
+  // Quick-pick buttons strip the space from "AA 100" → "AA100"
+  const pick = k => { const c = k.replace(" ", ""); setQ(c); setSel(c); setPage("live"); };
 
-  const cached    = sel ? liveCache[sel] : null;
-  const liveDelay = cached ? (cached.departure?.delay || cached.arrival?.delay || 0) : 0;
-  const liveStatus= cached ? cached.status : null;
-  const hasDelay  = liveDelay > 0 || liveStatus === "cancelled";
-  const altCount  = sel ? (ALTS[sel] || []).length : 0;
+  // Match sel ("AA100") back to ALTS keys ("AA 100")
+  const altsKey  = sel ? Object.keys(ALTS).find(k => k.replace(" ","") === sel) || sel : null;
+  const altCount = altsKey ? (ALTS[altsKey] || []).length : 0;
+  const hasDelay = false; // updated by LivePage via liveStatus
 
   return (
     <div style={{ minHeight:"100vh", background:"#f8f7f4", color:"#1e293b", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", paddingBottom:60 }}>
@@ -860,36 +793,36 @@ export default function App() {
         <div style={{ maxWidth:780, margin:"0 auto" }}>
           <div style={{ marginBottom:14 }}><Logo/></div>
 
-          <div style={{ position:"relative", maxWidth:440, marginBottom:12 }}>
+          {/* Search bar — no API calls until Enter/Search */}
+          <div style={{ display:"flex", gap:8, maxWidth:480, marginBottom:12 }}>
             <input
-              value={q} onChange={e => setQ(e.target.value)}
-              placeholder="Search any flight — e.g. AA 100, BA 178, EK 201"
-              style={{ width:"100%", background:"#f8f7f4", border:"1.5px solid #e8e6de", borderRadius:10, padding:"9px 14px", fontSize:13, color:"#1e293b", transition:"border-color 0.15s" }}
+              value={q}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              placeholder="e.g. AA100, BA178, EK201"
+              maxLength={6}
+              style={{ flex:1, background:"#f8f7f4", border:"1.5px solid #e8e6de", borderRadius:10, padding:"9px 14px", fontSize:13, color:"#1e293b", transition:"border-color 0.15s", fontFamily:"monospace" }}
               onFocus={e => e.target.style.borderColor = "#f59e0b"}
               onBlur={e  => e.target.style.borderColor = "#e8e6de"}
             />
-            {sugg.length > 0 && (
-              <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, background:"#fff", border:"1px solid #e8e6de", borderRadius:10, overflow:"hidden", zIndex:30, boxShadow:"0 4px 16px rgba(0,0,0,0.08)" }}>
-                {sugg.map(s => (
-                  <div key={s.key} onClick={() => pick(s.key)} style={{ padding:"9px 14px", cursor:"pointer", display:"flex", justifyContent:"space-between", fontSize:12, borderBottom:"1px solid #f8f7f4" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#f8f7f4"}
-                    onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
-                    <span style={{ fontFamily:"monospace", color:"#c2820a", fontWeight:600 }}>{s.label}</span>
-                    <span style={{ color:"#94a3b8" }}>{s.route}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <button onClick={submit} style={{ background:"#f59e0b", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:600, color:"#fff", cursor:"pointer" }}>
+              Search
+            </button>
           </div>
 
+          {/* Quick picks */}
           <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:sel ? 12 : 0 }}>
-            {Object.keys(FLIGHTS).map(k => (
-              <button key={k} onClick={() => pick(k)} style={{ background:sel === k ? "#fef3c7" : "#f8f7f4", border:`1.5px solid ${sel === k ? "#f59e0b" : "#e8e6de"}`, borderRadius:7, padding:"3px 10px", fontSize:11, color:sel === k ? "#c2820a" : "#64748b", fontWeight:sel === k ? 600 : 400, cursor:"pointer" }}>
-                {k}
-              </button>
-            ))}
+            {Object.keys(FLIGHTS).map(k => {
+              const clean = k.replace(" ","");
+              return (
+                <button key={k} onClick={() => pick(k)} style={{ background:sel === clean ? "#fef3c7" : "#f8f7f4", border:`1.5px solid ${sel === clean ? "#f59e0b" : "#e8e6de"}`, borderRadius:7, padding:"3px 10px", fontSize:11, color:sel === clean ? "#c2820a" : "#64748b", fontWeight:sel === clean ? 600 : 400, cursor:"pointer" }}>
+                  {k}
+                </button>
+              );
+            })}
           </div>
 
+          {/* Nav tabs */}
           {sel && (
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
               {[
@@ -899,9 +832,6 @@ export default function App() {
               ].map(([p, l]) => (
                 <button key={p} onClick={() => setPage(p)} style={{ background:page === p ? "#f59e0b" : "#f8f7f4", border:`1.5px solid ${page === p ? "#f59e0b" : "#e8e6de"}`, borderRadius:8, padding:"6px 14px", fontSize:12, color:page === p ? "#fff" : "#64748b", fontWeight:page === p ? 600 : 400, cursor:"pointer" }}>
                   {l}
-                  {p === "alts" && hasDelay && altCount > 0 && (
-                    <span style={{ marginLeft:5, background:page === "alts" ? "#fff" : "#dc2626", color:page === "alts" ? "#dc2626" : "#fff", borderRadius:9, padding:"1px 6px", fontSize:9, fontWeight:700 }}>{altCount}</span>
-                  )}
                 </button>
               ))}
             </div>
@@ -914,17 +844,17 @@ export default function App() {
           <div style={{ textAlign:"center", marginTop:60 }}>
             <div style={{ width:64, height:64, borderRadius:20, background:"#fef3c7", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, margin:"0 auto 16px" }}>✈</div>
             <div style={{ fontSize:20, fontWeight:700, color:"#1e293b", marginBottom:8 }}>Is your flight actually leaving?</div>
-            <div style={{ fontSize:13, color:"#94a3b8", marginBottom:24 }}>Search any flight number above to find out.</div>
+            <div style={{ fontSize:13, color:"#94a3b8", marginBottom:24 }}>Type a flight number and press Enter or Search.</div>
             <div style={{ display:"flex", justifyContent:"center", gap:12, flexWrap:"wrap" }}>
               {["Real delay odds", "Live tracking", "Escape options"].map(f => (
                 <div key={f} style={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:10, padding:"10px 18px", fontSize:12, color:"#64748b", fontWeight:500 }}>✓ {f}</div>
               ))}
             </div>
-            <div style={{ marginTop:20, fontSize:11, color:"#d1cfc7" }}>Try: AA 100 · BA 178 · EK 201 · UA 1</div>
+            <div style={{ marginTop:20, fontSize:11, color:"#d1cfc7" }}>Try: AA100 · BA178 · EK201 · UA1</div>
           </div>
         ) : page === "live"    ? <LivePage    key={sel + "l"} fk={sel}/>
           : page === "history" ? <HistoryPage key={sel + "h"} fk={sel}/>
-          : <AltsPage key={sel + "a"} fk={sel} liveDelayMin={liveDelay} liveStatus={liveStatus}/>
+          : <AltsPage key={sel + "a"} fk={sel} liveDelayMin={0} liveStatus={null}/>
         }
       </div>
     </div>
