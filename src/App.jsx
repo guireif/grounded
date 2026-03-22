@@ -400,10 +400,11 @@ function FlightMap({ fromIata, toIata, progress, planeLat, planeLng, apiStatus }
 // ─── LIVE STATUS PAGE ─────────────────────────────────────────────────────────
 
 function LivePage({ fk }) {
-  const [liveData, setLiveData] = useState(null);
-  const [position, setPosition] = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [liveData, setLiveData]   = useState(null);
+  const [position, setPosition]   = useState(null);
+  const [inbound,  setInbound]    = useState(null);
+  const [loading,  setLoading]    = useState(true);
+  const [error,    setError]      = useState(null);
 
   const callsign = fk.replace(" ", "");
   const meta     = FLIGHTS[fk];
@@ -413,16 +414,28 @@ function LivePage({ fk }) {
     setError(null);
     setLiveData(null);
     setPosition(null);
+    setInbound(null);
 
+    // Fetch live status first
     fetch(`/api/live?flight=${callsign}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error);
         setLiveData(data);
+        // Once we have registration, fetch inbound aircraft
+        const reg = data.aircraft?.registration;
+        const dep = data.departure?.iata;
+        if (reg) {
+          fetch(`/api/inbound?registration=${reg}&depIata=${dep || ""}`)
+            .then(r => r.json())
+            .then(ib => { if (!ib.error) setInbound(ib); })
+            .catch(() => {});
+        }
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
 
+    // Fetch OpenSky position (non-blocking)
     fetch(`/api/position?flight=${callsign}`)
       .then(r => r.json())
       .then(data => { if (!data.error) setPosition(data); })
@@ -447,7 +460,7 @@ function LivePage({ fk }) {
   const depSched   = fmtTime(liveData.departure?.scheduled) || "—";
   const arrEst     = fmtTime(liveData.arrival?.estimated || liveData.arrival?.scheduled) || "—";
   const arrSched   = fmtTime(liveData.arrival?.scheduled)   || "—";
-  const gate = liveData.departure?.gate || liveData.departure?.terminal || "—";
+  const gate       = liveData.departure?.gate || liveData.departure?.terminal || "—";
   const fromIata   = liveData.departure?.iata || meta?.from || "—";
   const toIata     = liveData.arrival?.iata   || meta?.to   || "—";
   const progress   = calcProgress(liveData.departure?.scheduled, liveData.arrival?.scheduled, apiStatus);
@@ -464,13 +477,35 @@ function LivePage({ fk }) {
   const statusBg    = isCancelled ? "#fee2e2" : delayMin > 0 ? "#ffedd5" : isLanded ? "#dcfce7" : isEnRoute ? "#dbeafe" : "#f1f5f9";
   const statusBdr   = isCancelled ? "#fca5a5" : delayMin > 0 ? "#fed7aa" : isLanded ? "#86efac" : isEnRoute ? "#93c5fd" : "#e2e8f0";
 
+  // Inbound urgency colors
+  const urgencyColors = {
+    green:   { bg:"#f0fdf4", border:"#86efac", text:"#15803d" },
+    yellow:  { bg:"#fffbeb", border:"#fde68a", text:"#92400e" },
+    red:     { bg:"#fef2f2", border:"#fca5a5", text:"#dc2626" },
+    neutral: { bg:"#f8f7f4", border:"#e8e6de", text:"#64748b" },
+  };
+  const uc = inbound ? (urgencyColors[inbound.urgency] || urgencyColors.neutral) : null;
+
+  // Phase icons
+  const phaseIcon = {
+    landed:    "🛬",
+    enroute:   "✈️",
+    boarding:  "🚶",
+    delayed:   "⏳",
+    cancelled: "❌",
+    scheduled: "🕐",
+    unknown:   "❓",
+  };
+
   return (
     <div>
+      {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:10, marginBottom:16 }}>
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
             <span style={{ fontSize:22, fontWeight:800, color:"#1e293b" }}>{fk}</span>
             {liveData.airline && <span style={{ background:"#f1f5f9", borderRadius:6, padding:"2px 8px", fontSize:11, color:"#64748b" }}>{liveData.airline}</span>}
+            {liveData.aircraft?.registration && <span style={{ background:"#f1f5f9", borderRadius:6, padding:"2px 8px", fontSize:11, color:"#94a3b8", fontFamily:"monospace" }}>{liveData.aircraft.registration}</span>}
           </div>
           <div style={{ fontSize:12, color:"#64748b" }}>{fromIata} → {toIata}</div>
           <div style={{ fontSize:13, color:col, fontWeight:600, marginTop:4 }}>{statusMsg}</div>
@@ -481,8 +516,10 @@ function LivePage({ fk }) {
         </div>
       </div>
 
+      {/* Map */}
       <FlightMap fromIata={fromIata} toIata={toIata} progress={progress} planeLat={planeLat} planeLng={planeLng} apiStatus={apiStatus}/>
 
+      {/* Progress bar */}
       {!isCancelled && (
         <div style={{ margin:"14px 0" }}>
           <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#94a3b8", marginBottom:5 }}>
@@ -498,6 +535,7 @@ function LivePage({ fk }) {
         </div>
       )}
 
+      {/* Stat cards */}
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
         <StatCard label="Departure"  value={depActual !== "—" ? depActual : "TBD"} sub={`Sched. ${depSched}${delayMin > 0 ? ` · +${delayMin}m` : ""}`} color={delayMin > 0 ? "#ea580c" : "#16a34a"}/>
         <StatCard label="Arrives"    value={arrEst}  sub={`Sched. ${arrSched}`}    color="#2563eb"/>
@@ -507,13 +545,100 @@ function LivePage({ fk }) {
         {isCancelled && <StatCard label="Status" value="VOID" sub="Cancelled" color="#dc2626"/>}
       </div>
 
+      {/* ── Inbound Aircraft Panel ── */}
+      {inbound && (
+        <div style={{ background:uc.bg, border:`1px solid ${uc.border}`, borderRadius:12, padding:"14px 16px", marginBottom:16 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:8, marginBottom:10 }}>
+            <div>
+              <div style={{ fontSize:11, color:uc.text, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:4 }}>
+                Where is your plane right now?
+              </div>
+              <div style={{ fontSize:14, color:"#1e293b", fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
+                <span>{phaseIcon[inbound.phase] || "✈️"}</span>
+                <span>{inbound.message}</span>
+              </div>
+            </div>
+            {inbound.inbound?.flight && !inbound.isOurFlight && (
+              <div style={{ background:"#fff", border:`1px solid ${uc.border}`, borderRadius:8, padding:"6px 10px", textAlign:"center" }}>
+                <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>Inbound flight</div>
+                <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", fontFamily:"monospace" }}>{inbound.inbound.flight}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Inbound route details */}
+          {inbound.inbound && !inbound.isOurFlight && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <div style={{ background:"#fff", borderRadius:8, padding:"8px 12px", flex:1, minWidth:100, textAlign:"center" }}>
+                <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>From</div>
+                <div style={{ fontSize:16, fontWeight:800, color:"#1e293b", fontFamily:"monospace" }}>{inbound.inbound.from}</div>
+                {inbound.inbound.fromName && <div style={{ fontSize:10, color:"#94a3b8" }}>{inbound.inbound.fromName}</div>}
+              </div>
+              <div style={{ fontSize:18, color:"#94a3b8" }}>→</div>
+              <div style={{ background:"#fff", borderRadius:8, padding:"8px 12px", flex:1, minWidth:100, textAlign:"center" }}>
+                <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>To</div>
+                <div style={{ fontSize:16, fontWeight:800, color:"#1e293b", fontFamily:"monospace" }}>{inbound.inbound.to}</div>
+                {inbound.inbound.toName && <div style={{ fontSize:10, color:"#94a3b8" }}>{inbound.inbound.toName}</div>}
+              </div>
+              {(inbound.inbound.arrEst || inbound.inbound.arrSched) && (
+                <div style={{ background:"#fff", borderRadius:8, padding:"8px 12px", flex:1, minWidth:100, textAlign:"center" }}>
+                  <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>Landing</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:uc.text }}>
+                    {fmtTime(inbound.inbound.arrEst || inbound.inbound.arrSched)}
+                  </div>
+                  {inbound.inbound.arrDelay > 0 && (
+                    <div style={{ fontSize:10, color:"#ea580c" }}>+{inbound.inbound.arrDelay}m delay</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Full day schedule for this aircraft */}
+          {inbound.allLegs && inbound.allLegs.length > 1 && (
+            <div style={{ marginTop:12, paddingTop:10, borderTop:`1px solid ${uc.border}` }}>
+              <div style={{ fontSize:11, color:"#94a3b8", marginBottom:8 }}>Aircraft schedule today</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                {inbound.allLegs.map((leg, i) => {
+                  const isCurrentLeg = leg.from === inbound.inbound?.from && leg.to === inbound.inbound?.to;
+                  const isOurLeg     = leg.to === fromIata;
+                  return (
+                    <div key={i} style={{
+                      display:"flex", alignItems:"center", gap:8, padding:"6px 8px",
+                      background: isOurLeg ? "#fff" : isCurrentLeg ? uc.bg : "transparent",
+                      borderRadius:6,
+                      border: isOurLeg ? `1px solid ${uc.border}` : "1px solid transparent",
+                      fontSize:12,
+                    }}>
+                      <span style={{ fontFamily:"monospace", color:"#94a3b8", fontSize:10, minWidth:50 }}>
+                        {fmtTime(leg.depSched) || "—"}
+                      </span>
+                      <span style={{ fontFamily:"monospace", fontWeight:600, color:"#1e293b" }}>
+                        {leg.from} → {leg.to}
+                      </span>
+                      <span style={{ fontSize:10, color:"#94a3b8", marginLeft:"auto" }}>
+                        {leg.flight}
+                      </span>
+                      {isCurrentLeg && <span style={{ fontSize:10, color:uc.text, fontWeight:600 }}>← now</span>}
+                      {isOurLeg     && <span style={{ fontSize:10, color:"#f59e0b", fontWeight:600 }}>← your flight</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Data source badge */}
       <div style={{ padding:"10px 14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:10, fontSize:12, color:"#15803d", display:"flex", alignItems:"center", gap:8 }}>
         <span>✓</span>
-        <span>Live data from AviationStack{position ? " + OpenSky" : ""} · Updated just now</span>
+        <span>Live data from AeroDataBox{position ? " + OpenSky" : ""}{inbound ? " + Aircraft tracker" : ""} · Updated just now</span>
       </div>
     </div>
   );
 }
+
 
 // ─── HISTORY PAGE ─────────────────────────────────────────────────────────────
 
