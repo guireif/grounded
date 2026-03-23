@@ -429,11 +429,11 @@ function LivePage({ fk }) {
         const reg = data.aircraft?.registration;
         const dep = data.departure?.iata;
         if (reg) {
-          fetch(`/api/inbound?registration=${reg}&depIata=${dep || ""}&flight=${callsign}`)
+          fetch(`/api/inbound?flight=${callsign}&depIata=${dep || ""}`)
             .then(r => r.json())
             .then(ib => {
               if (!ib.error) setInbound(ib);
-              else console.warn("Inbound error:", ib.error, ib.debug);
+              else console.warn("Inbound error:", ib.error);
             })
             .catch(e => console.warn("Inbound fetch failed:", e));
         }
@@ -487,6 +487,7 @@ function LivePage({ fk }) {
   const urgencyColors = {
     green:   { bg:"#f0fdf4", border:"#86efac", text:"#15803d" },
     yellow:  { bg:"#fffbeb", border:"#fde68a", text:"#92400e" },
+    blue:    { bg:"#eff6ff", border:"#93c5fd", text:"#1d4ed8" },
     red:     { bg:"#fef2f2", border:"#fca5a5", text:"#dc2626" },
     neutral: { bg:"#f8f7f4", border:"#e8e6de", text:"#64748b" },
   };
@@ -564,36 +565,36 @@ function LivePage({ fk }) {
                 <span>{inbound.message}</span>
               </div>
             </div>
-            {inbound.inbound?.flight && (
+            {inbound.current?.flight && (
               <div style={{ background:"#fff", border:`1px solid ${uc.border}`, borderRadius:8, padding:"6px 10px", textAlign:"center" }}>
                 <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>Inbound flight</div>
-                <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", fontFamily:"monospace" }}>{inbound.inbound.flight}</div>
+                <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", fontFamily:"monospace" }}>{inbound.current.flight}</div>
               </div>
             )}
           </div>
 
           {/* Inbound route details */}
-          {inbound.inbound && (
+          {inbound.current && (
             <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
               <div style={{ background:"#fff", borderRadius:8, padding:"8px 12px", flex:1, minWidth:100, textAlign:"center" }}>
                 <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>From</div>
-                <div style={{ fontSize:16, fontWeight:800, color:"#1e293b", fontFamily:"monospace" }}>{inbound.inbound.from}</div>
-                {inbound.inbound.fromName && <div style={{ fontSize:10, color:"#94a3b8" }}>{inbound.inbound.fromName}</div>}
+                <div style={{ fontSize:16, fontWeight:800, color:"#1e293b", fontFamily:"monospace" }}>{inbound.current.from}</div>
+                {inbound.current.fromName && <div style={{ fontSize:10, color:"#94a3b8" }}>{inbound.current.fromName}</div>}
               </div>
               <div style={{ fontSize:18, color:"#94a3b8" }}>→</div>
               <div style={{ background:"#fff", borderRadius:8, padding:"8px 12px", flex:1, minWidth:100, textAlign:"center" }}>
                 <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>To</div>
-                <div style={{ fontSize:16, fontWeight:800, color:"#1e293b", fontFamily:"monospace" }}>{inbound.inbound.to}</div>
-                {inbound.inbound.toName && <div style={{ fontSize:10, color:"#94a3b8" }}>{inbound.inbound.toName}</div>}
+                <div style={{ fontSize:16, fontWeight:800, color:"#1e293b", fontFamily:"monospace" }}>{inbound.current.to}</div>
+                {inbound.current.toName && <div style={{ fontSize:10, color:"#94a3b8" }}>{inbound.current.toName}</div>}
               </div>
-              {(inbound.inbound.arrEst || inbound.inbound.arrSched) && (
+              {(inbound.current.arrEst || inbound.current.arrSched) && (
                 <div style={{ background:"#fff", borderRadius:8, padding:"8px 12px", flex:1, minWidth:100, textAlign:"center" }}>
                   <div style={{ fontSize:10, color:"#94a3b8", marginBottom:2 }}>Landing</div>
                   <div style={{ fontSize:16, fontWeight:800, color:uc.text }}>
-                    {fmtTime(inbound.inbound.arrEst || inbound.inbound.arrSched)}
+                    {fmtTime(inbound.current.arrEst || inbound.current.arrSched)}
                   </div>
-                  {inbound.inbound.arrDelay > 0 && (
-                    <div style={{ fontSize:10, color:"#ea580c" }}>+{inbound.inbound.arrDelay}m delay</div>
+                  {inbound.current.arrDelay > 0 && (
+                    <div style={{ fontSize:10, color:"#ea580c" }}>+{inbound.current.arrDelay}m delay</div>
                   )}
                 </div>
               )}
@@ -606,7 +607,7 @@ function LivePage({ fk }) {
               <div style={{ fontSize:11, color:"#94a3b8", marginBottom:8 }}>Aircraft schedule today</div>
               <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                 {inbound.allLegs.map((leg, i) => {
-                  const isCurrentLeg = leg.from === inbound.inbound?.from && leg.to === inbound.inbound?.to;
+                  const isCurrentLeg = leg.from === inbound.current?.from && leg.to === inbound.inbound?.to;
                   const isOurLeg     = leg.to === fromIata;
                   return (
                     <div key={i} style={{
