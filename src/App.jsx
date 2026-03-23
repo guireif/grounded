@@ -426,16 +426,7 @@ function LivePage({ fk }) {
       .then(data => {
         if (data.error) throw new Error(data.error);
         setLiveData(data);
-        // Fetch aircraft info after short delay to avoid rate limiting
-        setTimeout(() => {
-          fetch(`/api/aircraft?flight=${callsign}`)
-            .then(r => r.json())
-            .then(ib => {
-              if (!ib.error) setInbound(ib);
-              else console.warn("Inbound error:", ib.error);
-            })
-            .catch(e => console.warn("Inbound fetch failed:", e));
-        }, 1500);
+        // aircraft fetch moved outside
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
@@ -445,6 +436,19 @@ function LivePage({ fk }) {
       .then(r => r.json())
       .then(data => { if (!data.error) setPosition(data); })
       .catch(() => {});
+
+    // Fetch aircraft/inbound info independently with delay
+    const aircraftTimer = setTimeout(() => {
+      fetch(`/api/aircraft?flight=${callsign}`)
+        .then(r => r.json())
+        .then(ib => {
+          if (!ib.error) setInbound(ib);
+          else console.warn("Aircraft error:", ib.error);
+        })
+        .catch(e => console.warn("Aircraft fetch failed:", e));
+    }, 2000);
+
+    return () => clearTimeout(aircraftTimer);
   }, [fk]);
 
   if (loading) return <Spinner/>;
