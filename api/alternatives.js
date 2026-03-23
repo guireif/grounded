@@ -22,13 +22,13 @@ export default async function handler(req, res) {
     const url = `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${origin}/${fmt(from)}/${fmt(to)}?direction=Dep&withLeg=true&withCancelled=false&withCodeshared=false&withLocation=false`;
 
     const r = await fetch(url, { headers });
+    const text = await r.text();
 
     if (!r.ok) {
-      const text = await r.text();
       return res.status(200).json({ error: "Could not fetch departures", detail: text.slice(0, 200) });
     }
 
-    const data = await fetch(url, { headers }).then(r => r.json());
+    const data = JSON.parse(text);
     const departures = data?.departures || data?.items || [];
 
     if (!departures.length) {
