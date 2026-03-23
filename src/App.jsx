@@ -425,18 +425,14 @@ function LivePage({ fk }) {
       .then(data => {
         if (data.error) throw new Error(data.error);
         setLiveData(data);
-        // Once we have registration, fetch inbound aircraft
-        const reg = data.aircraft?.registration;
-        const dep = data.departure?.iata;
-        if (reg) {
-          fetch(`/api/inbound?flight=${callsign}`)
-            .then(r => r.json())
-            .then(ib => {
-              if (!ib.error) setInbound(ib);
-              else console.warn("Inbound error:", ib.error);
-            })
-            .catch(e => console.warn("Inbound fetch failed:", e));
-        }
+        // Always fetch inbound aircraft info using flight number
+        fetch(`/api/inbound?flight=${callsign}`)
+          .then(r => r.json())
+          .then(ib => {
+            if (!ib.error) setInbound(ib);
+            else console.warn("Inbound error:", ib.error);
+          })
+          .catch(e => console.warn("Inbound fetch failed:", e));
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
