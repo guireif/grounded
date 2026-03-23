@@ -1050,12 +1050,10 @@ function AltsPage({ fk, liveData, liveDelayMin, liveStatus }) {
 
   if (error || !alts || alts.length === 0) return (
     <div style={{ textAlign:"center", padding:"40px 20px" }}>
-      <div style={{ fontSize:36, marginBottom:10 }}>{isDelayed ? "😬" : "✅"}</div>
-      <div style={{ fontSize:14, color:"#64748b", fontWeight:600, marginBottom:6 }}>
-        {isDelayed ? "No alternatives found" : "Flight's on time — no need to switch!"}
-      </div>
+      <div style={{ fontSize:36, marginBottom:10 }}>🔍</div>
+      <div style={{ fontSize:14, color:"#64748b", fontWeight:600, marginBottom:6 }}>No alternative flights found</div>
       <div style={{ fontSize:12, color:"#94a3b8" }}>
-        {fromIata && toIata ? `${fromIata} → ${toIata}` : "Search a flight to see alternatives"}
+        {fromIata && toIata ? `No other flights on ${fromIata} → ${toIata} in this time window` : "Search a flight to see alternatives"}
       </div>
       {error && <div style={{ fontSize:11, color:"#dc2626", marginTop:8 }}>{error}</div>}
     </div>
@@ -1106,7 +1104,7 @@ function AltsPage({ fk, liveData, liveDelayMin, liveStatus }) {
       )}
 
       <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>
-        {alts.length} flights found on {fromIata} → {toIata} around the same time
+        {alts.length} flights on {fromIata} → {toIata} around the same departure time — including yours
       </p>
 
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
