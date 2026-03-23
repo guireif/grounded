@@ -105,7 +105,8 @@ function mapStatus(apiStatus, delayMin) {
   if (s === "cancelled" || s === "canceled")         return "Cancelled";
   if (s === "landed" || s === "arrived")              return "Landed";
   if (s === "enroute" || s === "active" ||
-      s === "airborne" || s === "departed")           return delayMin > 0 ? "Delayed – In Flight" : "En Route";
+      s === "airborne" || s === "departed" ||
+      s === "approaching")                            return delayMin > 0 ? "Delayed – In Flight" : "En Route";
   if (s === "boarding")                               return "Boarding";
   if (s === "scheduled" || s === "unknown")          return delayMin > 0 ? `Delayed – ${delayMin}m` : "Scheduled";
   if (s === "incident" || s === "delayed")           return "Delayed";
