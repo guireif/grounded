@@ -125,7 +125,8 @@ export default async function handler(req, res) {
       urgency = "blue";
       const eta = fmtTime(getT(ourFlight, "arrival", "local"));
       message = `Your flight is airborne — landing at ${getIata(ourFlight, "arrival")}${eta ? ` at ${eta}` : ""}`;
-    } else if (ourPhase === "landed") {
+    } else if (ourPhase === "landed" && !inboundFlight) {
+      // Our flight itself has landed (no more legs)
       phase   = "landed";
       urgency = "green";
       message = `Flight has arrived at ${getIata(ourFlight, "arrival")}`;
@@ -146,7 +147,7 @@ export default async function handler(req, res) {
       } else if (inPhase === "landed") {
         phase   = "landed";
         urgency = "green";
-        message = `Your plane just landed at ${inTo} from ${inFrom} — now preparing for your flight`;
+        message = `Your plane is at ${inTo} (arrived from ${inFrom}) — ready for your departure`;
       } else if (inPhase === "delayed") {
         phase   = "delayed";
         urgency = "red";
