@@ -427,7 +427,7 @@ function LivePage({ fk }) {
         if (data.error) throw new Error(data.error);
         setLiveData(data);
         // Always fetch inbound aircraft info using flight number
-        fetch(`/api/inbound?flight=${callsign}`)
+        fetch(`/api/aircraft?flight=${callsign}`)
           .then(r => r.json())
           .then(ib => {
             if (!ib.error) setInbound(ib);

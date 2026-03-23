@@ -41,14 +41,37 @@ export default async function handler(req, res) {
       return ta - tb;
     });
 
-    // Find today's departure leg
-    const todayIdx = depIata
-      ? allFlights.findIndex(f =>
-          (f.departure?.airport?.iata || f.departure?.iata || "").toUpperCase() === depIata.toUpperCase()
-        )
-      : allFlights.length - 1;
+    const now = new Date();
 
-    const ourIdx        = todayIdx >= 0 ? todayIdx : allFlights.length - 1;
+    // Find the most relevant flight:
+    // 1. If depIata given, match by departure airport
+    // 2. Otherwise find the flight closest to now (in progress or most recently departed)
+    let ourIdx = -1;
+
+    if (depIata) {
+      ourIdx = allFlights.findIndex(f =>
+        (f.departure?.airport?.iata || f.departure?.iata || "").toUpperCase() === depIata.toUpperCase()
+      );
+    }
+
+    if (ourIdx === -1) {
+      // Find flight currently in progress or most recently relevant
+      const active = allFlights.findIndex(f => {
+        const s = (f.status || "").toLowerCase().replace(/[\s_-]/g, "");
+        return s.includes("enroute") || s.includes("airborne") || s.includes("boarding") || s.includes("departed");
+      });
+      if (active >= 0) {
+        ourIdx = active;
+      } else {
+        // Pick the flight whose departure is closest to now (past or future)
+        ourIdx = allFlights.reduce((best, f, i) => {
+          const depTime = new Date(f.departure?.scheduledTime?.utc || f.departure?.scheduled || 0);
+          const bestTime = new Date(allFlights[best]?.departure?.scheduledTime?.utc || allFlights[best]?.departure?.scheduled || 0);
+          return Math.abs(depTime - now) < Math.abs(bestTime - now) ? i : best;
+        }, 0);
+      }
+    }
+
     const currentFlight = allFlights[ourIdx];
     const inboundFlight = ourIdx > 0 ? allFlights[ourIdx - 1] : null;
 
