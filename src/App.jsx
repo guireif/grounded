@@ -429,7 +429,7 @@ function LivePage({ fk }) {
         const reg = data.aircraft?.registration;
         const dep = data.departure?.iata;
         if (reg) {
-          fetch(`/api/inbound?flight=${callsign}&depIata=${dep || ""}`)
+          fetch(`/api/inbound?flight=${callsign}`)
             .then(r => r.json())
             .then(ib => {
               if (!ib.error) setInbound(ib);
