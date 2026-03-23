@@ -614,8 +614,11 @@ function LivePage({ fk }) {
               <div style={{ fontSize:11, color:"#94a3b8", marginBottom:8 }}>Aircraft schedule today</div>
               <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                 {inbound.allLegs.map((leg, i) => {
-                  const isCurrentLeg = leg.from === inbound.current?.from && leg.to === inbound.inbound?.to;
-                  const isOurLeg     = leg.to === fromIata;
+                  // Match the exact flight number of our searched flight
+                  const searchedFlight = fk.replace(' ', '').toUpperCase();
+                  const legFlight = (leg.flight || '').replace(' ', '').toUpperCase();
+                  const isOurLeg = legFlight === searchedFlight && leg.from === fromIata;
+                  const isCurrentLeg = leg.from === inbound.current?.from && leg.to === inbound.current?.to && !isOurLeg;
                   return (
                     <div key={i} style={{
                       display:"flex", alignItems:"center", gap:8, padding:"6px 8px",
