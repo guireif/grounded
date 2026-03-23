@@ -421,19 +421,21 @@ function LivePage({ fk }) {
     setInbound(null);
 
     // Fetch live status first
-    fetch(`/api/aircraft?flight=${callsign}`) // v2
+    fetch(`/api/live?flight=${callsign}`)
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error);
         setLiveData(data);
-        // Always fetch inbound aircraft info using flight number
-        fetch(`/api/aircraft?flight=${callsign}`)
-          .then(r => r.json())
-          .then(ib => {
-            if (!ib.error) setInbound(ib);
-            else console.warn("Inbound error:", ib.error);
-          })
-          .catch(e => console.warn("Inbound fetch failed:", e));
+        // Fetch aircraft info after short delay to avoid rate limiting
+        setTimeout(() => {
+          fetch(`/api/aircraft?flight=${callsign}`)
+            .then(r => r.json())
+            .then(ib => {
+              if (!ib.error) setInbound(ib);
+              else console.warn("Inbound error:", ib.error);
+            })
+            .catch(e => console.warn("Inbound fetch failed:", e));
+        }, 1500);
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
@@ -1193,4 +1195,4 @@ export default function App() {
       </div>
     </div>
   );
-}// Sun Mar 22 21:42:56 EDT 2026
+}
