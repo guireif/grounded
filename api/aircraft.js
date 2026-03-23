@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     }
 
     if (!allFlights.length) {
-      return res.status(404).json({ error: "No flight data found" });
+      return res.status(200).json({ error: "No flight data found" });
     }
 
     // Sort chronologically
