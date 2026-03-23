@@ -17,21 +17,23 @@ export default async function handler(req, res) {
     // Fetch today and yesterday to find inbound leg
     let allFlights = [];
 
+    const debugLog = [];
     for (const date of [yesterday, today]) {
       try {
         const url = `https://aerodatabox.p.rapidapi.com/flights/number/${flight}/${date}`;
         const r   = await fetch(url, { headers });
-        if (!r.ok) continue;
         const text = await r.text();
+        debugLog.push({ date, status: r.status, bodyLen: text.length, body: text.slice(0, 200) });
+        if (!r.ok) continue;
         if (!text || text.trim().length === 0) continue;
         const data = JSON.parse(text);
         const items = Array.isArray(data) ? data : [data];
         allFlights = [...allFlights, ...items.filter(f => f && f.departure)];
-      } catch { continue; }
+      } catch(e) { debugLog.push({ date, error: e.message }); continue; }
     }
 
     if (!allFlights.length) {
-      return res.status(200).json({ error: "No flight data found" });
+      return res.status(200).json({ error: "No flight data found", debug: debugLog });
     }
 
     // Sort chronologically
