@@ -421,7 +421,7 @@ function LivePage({ fk }) {
     setInbound(null);
 
     // Fetch live status first
-    fetch(`/api/live?flight=${callsign}`)
+    fetch(`/api/aircraft?flight=${callsign}`) // v2
       .then(r => r.json())
       .then(data => {
         if (data.error) throw new Error(data.error);
