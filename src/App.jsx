@@ -412,7 +412,7 @@ function LivePage({ fk }) {
 
   const callsign      = fk.replace(" ", "");
   const meta          = FLIGHTS[fk];
-  const registrationRef = { current: "" };
+  const registrationRef = { current: "" }; // stores reg from live data
 
   useEffect(() => {
     setLoading(true);
@@ -442,9 +442,7 @@ function LivePage({ fk }) {
     // Fetch aircraft/inbound info independently with delay
     const aircraftTimer = setTimeout(() => {
       const reg = registrationRef.current;
-      const aircraftUrl = reg
-        ? `/api/aircraft?flight=${callsign}&registration=${reg}`
-        : `/api/aircraft?flight=${callsign}`;
+      const aircraftUrl = `/api/aircraft?flight=${callsign}${reg ? `&registration=${reg}` : ""}`;
       fetch(aircraftUrl)
         .then(r => r.json())
         .then(ib => {
