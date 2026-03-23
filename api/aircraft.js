@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const { flight, depIata } = req.query;
+  const { flight, depIata, registration } = req.query;
 
   if (!flight) {
     return res.status(400).json({ error: "flight number required" });
@@ -18,6 +18,11 @@ export default async function handler(req, res) {
     let allFlights = [];
 
     const debugLog = [];
+
+    // If registration provided, try to find all flights for this specific aircraft
+    // by searching the flight number AND checking registration matches
+    const targetReg = registration ? registration.toUpperCase() : null;
+
     for (const date of [yesterday, today]) {
       try {
         const url = `https://aerodatabox.p.rapidapi.com/flights/number/${flight}/${date}`;

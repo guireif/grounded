@@ -410,8 +410,9 @@ function LivePage({ fk }) {
   const [loading,  setLoading]    = useState(true);
   const [error,    setError]      = useState(null);
 
-  const callsign = fk.replace(" ", "");
-  const meta     = FLIGHTS[fk];
+  const callsign      = fk.replace(" ", "");
+  const meta          = FLIGHTS[fk];
+  const registrationRef = { current: "" };
 
   useEffect(() => {
     setLoading(true);
@@ -426,6 +427,7 @@ function LivePage({ fk }) {
       .then(data => {
         if (data.error) throw new Error(data.error);
         setLiveData(data);
+        if (data.aircraft?.registration) registrationRef.current = data.aircraft.registration;
         // aircraft fetch moved outside
       })
       .catch(err => setError(err.message))
@@ -439,7 +441,11 @@ function LivePage({ fk }) {
 
     // Fetch aircraft/inbound info independently with delay
     const aircraftTimer = setTimeout(() => {
-      fetch(`/api/aircraft?flight=${callsign}`)
+      const reg = registrationRef.current;
+      const aircraftUrl = reg
+        ? `/api/aircraft?flight=${callsign}&registration=${reg}`
+        : `/api/aircraft?flight=${callsign}`;
+      fetch(aircraftUrl)
         .then(r => r.json())
         .then(ib => {
           if (!ib.error) setInbound(ib);
