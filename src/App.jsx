@@ -649,10 +649,23 @@ function LivePage({ fk, onLiveData }) {
       )}
 
       {/* Data source badge */}
-      <div style={{ padding:"10px 14px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:10, fontSize:12, color:"#15803d", display:"flex", alignItems:"center", gap:8 }}>
-        <span>✓</span>
-        <span>Live data from AeroDataBox{position ? " + OpenSky" : ""}{inbound ? " + Aircraft tracker" : ""} · Updated just now</span>
-      </div>
+      {(() => {
+        const q = liveData.dataQuality;
+        const isLive = q === "live" || q === "adsb";
+        const bg  = isLive ? "#f0fdf4" : "#fffbeb";
+        const bdr = isLive ? "#86efac" : "#fde68a";
+        const col = isLive ? "#15803d" : "#92400e";
+        const msg = q === "live"     ? "Live data from AeroDataBox"
+                  : q === "adsb"     ? "ADS-B position data"
+                  : q === "schedule" ? "Schedule data only — live status may differ"
+                  : "Data from AeroDataBox";
+        return (
+          <div style={{ padding:"10px 14px", background:bg, border:`1px solid ${bdr}`, borderRadius:10, fontSize:12, color:col, display:"flex", alignItems:"center", gap:8 }}>
+            <span>{isLive ? "✓" : "⚠️"}</span>
+            <span>{msg}{position ? " + OpenSky" : ""}{inbound ? " + Aircraft tracker" : ""} · Updated just now</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }

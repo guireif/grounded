@@ -87,6 +87,15 @@ export default async function handler(req, res) {
         model:        f.aircraft?.model,
         registration: f.aircraft?.reg || f.aircraft?.registration,
       },
+      // Data quality: Basic = schedule only, Live = real-time, ADS-B = position tracking
+      quality: f.departure?.quality || f.quality || [],
+      dataQuality: (() => {
+        const q = (f.departure?.quality || f.quality || []).map(s => s.toLowerCase());
+        if (q.includes("live"))  return "live";
+        if (q.includes("ads-b")) return "adsb";
+        if (q.includes("basic")) return "schedule";
+        return "unknown";
+      })(),
     });
 
   } catch (error) {
