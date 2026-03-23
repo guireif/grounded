@@ -403,7 +403,7 @@ function FlightMap({ fromIata, toIata, progress, planeLat, planeLng, apiStatus }
 
 // ─── LIVE STATUS PAGE ─────────────────────────────────────────────────────────
 
-function LivePage({ fk }) {
+function LivePage({ fk, onLiveData }) {
   const [liveData, setLiveData]   = useState(null);
   const [position, setPosition]   = useState(null);
   const [inbound,  setInbound]    = useState(null);
@@ -427,6 +427,7 @@ function LivePage({ fk }) {
       .then(data => {
         if (data.error) throw new Error(data.error);
         setLiveData(data);
+        if (onLiveData) onLiveData(data);
         if (data.aircraft?.registration) registrationRef.current = data.aircraft.registration;
         // aircraft fetch moved outside
       })
@@ -1005,112 +1006,182 @@ const ai     = a => a.split(" ").filter(w => !["Air","Airlines","Airways"].inclu
 const acolor = a => { const h = a.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % 360; return `hsl(${h},55%,88%)`; };
 const atcolor= a => { const h = a.split("").reduce((s, c) => s + c.charCodeAt(0), 0) % 360; return `hsl(${h},55%,30%)`; };
 
-function AltsPage({ fk, liveDelayMin, liveStatus }) {
-  const meta  = FLIGHTS[fk];
-  const alts  = ALTS[fk] || [];
-  const [filter, setFilter] = useState("all");
-  const isDelayed = liveDelayMin > 0 || liveStatus === "cancelled";
-  const isCx      = liveStatus === "cancelled";
-  const filtered  = filter === "all" ? alts : alts.filter(a => a.type === filter);
-  const tc = t => alts.filter(a => a.type === t).length;
+function AltsPage({ fk, liveData, liveDelayMin, liveStatus }) {
+  const [alts, setAlts]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
+  const meta = FLIGHTS[fk];
 
-  if (!isDelayed && alts.length === 0) return (
-    <div style={{ textAlign:"center", padding:"50px 20px" }}>
-      <div style={{ fontSize:36, marginBottom:10 }}>✅</div>
-      <div style={{ fontSize:14, color:"#64748b" }}>Flight's on time — no need to switch!</div>
+  const fromIata = liveData?.departure?.iata || meta?.from;
+  const toIata   = liveData?.arrival?.iata   || meta?.to;
+  const depTime  = liveData?.departure?.scheduled;
+
+  useEffect(() => {
+    if (!fromIata || !toIata) { setLoading(false); return; }
+    setLoading(true);
+    setError(null);
+    fetch(`/api/alternatives?origin=${fromIata}&dest=${toIata}${depTime ? `&depTime=${encodeURIComponent(depTime)}` : ""}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error && !data.alternatives) throw new Error(data.error);
+        setAlts(data.alternatives || []);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [fk, fromIata, toIata]);
+
+  const isCx      = liveStatus === "cancelled";
+  const isDelayed = liveDelayMin > 0 || isCx;
+
+  if (loading) return <Spinner/>;
+
+  if (error || !alts || alts.length === 0) return (
+    <div style={{ textAlign:"center", padding:"40px 20px" }}>
+      <div style={{ fontSize:36, marginBottom:10 }}>{isDelayed ? "😬" : "✅"}</div>
+      <div style={{ fontSize:14, color:"#64748b", fontWeight:600, marginBottom:6 }}>
+        {isDelayed ? "No alternatives found" : "Flight's on time — no need to switch!"}
+      </div>
+      <div style={{ fontSize:12, color:"#94a3b8" }}>
+        {fromIata && toIata ? `${fromIata} → ${toIata}` : "Search a flight to see alternatives"}
+      </div>
+      {error && <div style={{ fontSize:11, color:"#dc2626", marginTop:8 }}>{error}</div>}
     </div>
   );
-  if (alts.length === 0) return (
-    <div style={{ textAlign:"center", padding:"50px 20px" }}>
-      <div style={{ fontSize:36, marginBottom:10 }}>🔍</div>
-      <div style={{ fontSize:13, color:"#94a3b8" }}>No alternatives found for this route.</div>
-    </div>
-  );
+
+  const ourDepTime = liveData?.departure?.scheduled
+    ? new Date(liveData.departure.scheduled)
+    : null;
+
+  const timeDiff = (depStr) => {
+    if (!ourDepTime || !depStr) return null;
+    // depStr is like "13:37" — combine with today's date
+    const [h, m] = depStr.split(":").map(Number);
+    const altDate = new Date(ourDepTime);
+    altDate.setHours(h, m, 0, 0);
+    const diff = Math.round((altDate - ourDepTime) / 60000);
+    if (diff === 0)   return "Same time";
+    if (diff > 0)     return `+${diff}m later`;
+    return `${Math.abs(diff)}m earlier`;
+  };
+
+  const statusColor = s => {
+    const st = (s || "").toLowerCase();
+    if (st.includes("cancel"))  return "#dc2626";
+    if (st.includes("delay"))   return "#ea580c";
+    if (st.includes("arrived") || st.includes("landed")) return "#16a34a";
+    if (st.includes("route") || st.includes("departed")) return "#2563eb";
+    return "#64748b";
+  };
 
   return (
     <div>
-      <div style={{ marginBottom:14, padding:"12px 14px", background:isCx ? "#fef2f2" : "#fff7ed", border:`1px solid ${isCx ? "#fca5a5" : "#fed7aa"}`, borderRadius:12, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:700, color:isCx ? "#dc2626" : "#c2410c", marginBottom:2 }}>{isCx ? "Flight cancelled" : "Flight delayed"}</div>
-          <div style={{ fontSize:12, color:"#64748b" }}>{isCx ? `${fk} isn't going anywhere.` : `${fk} is +${liveDelayMin}m late.`} Here are your options.</div>
+      {/* Header banner */}
+      {isDelayed && (
+        <div style={{ marginBottom:14, padding:"12px 14px", background:isCx ? "#fef2f2" : "#fff7ed", border:`1px solid ${isCx ? "#fca5a5" : "#fed7aa"}`, borderRadius:12, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:700, color:isCx ? "#dc2626" : "#c2410c", marginBottom:2 }}>
+              {isCx ? "Flight cancelled" : "Flight delayed"}
+            </div>
+            <div style={{ fontSize:12, color:"#64748b" }}>
+              {isCx ? `${fk} isn't going anywhere.` : `${fk} is +${liveDelayMin}m late.`} Here are your options.
+            </div>
+          </div>
+          <div style={{ fontSize:18, fontWeight:800, color:isCx ? "#dc2626" : "#c2410c" }}>
+            {isCx ? "CANX" : `+${liveDelayMin}m`}
+          </div>
         </div>
-        <div style={{ fontSize:18, fontWeight:800, color:isCx ? "#dc2626" : "#c2410c" }}>{isCx ? "CANX" : `+${liveDelayMin}m`}</div>
-      </div>
+      )}
 
-      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
-        {[
-          { key:"all",     label:`All (${alts.length})` },
-          { key:"direct",  label:`Nonstop (${tc("direct")})` },
-          { key:"connect", label:`1 Stop (${tc("connect")})` },
-          { key:"nearby",  label:`Alt. Airport (${tc("nearby")})` },
-        ].filter(f => f.key === "all" || tc(f.key) > 0).map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={{ background:filter === f.key ? "#f59e0b" : "#fff", border:`1px solid ${filter === f.key ? "#f59e0b" : "#e8e6de"}`, borderRadius:20, padding:"4px 12px", fontSize:11, color:filter === f.key ? "#fff" : "#64748b", fontWeight:filter === f.key ? 600 : 400, cursor:"pointer" }}>{f.label}</button>
-        ))}
-      </div>
+      <p style={{ fontSize:12, color:"#94a3b8", marginBottom:12 }}>
+        {alts.length} flights found on {fromIata} → {toIata} around the same time
+      </p>
 
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {filtered.map(alt => {
-          const depH = meta ? parseInt(meta.dep || "8") : 8;
-          const depM = meta ? parseInt((meta.dep || "8:00").split(":")[1] || "0") : 0;
-          const [dh, dm] = alt.dep.split(":").map(Number);
-          const diff = (dh * 60 + dm) - (depH * 60 + depM);
-          const ds   = diff === 0 ? "Same time" : diff > 0 ? `+${diff}m later` : `${Math.abs(diff)}m earlier`;
-          const bs   = alt.badge ? BADGE_STYLES[alt.badge] : null;
-          const sc   = alt.seats <= 3 ? "#dc2626" : alt.seats <= 8 ? "#ea580c" : "#16a34a";
+        {alts.map((alt, i) => {
+          const diff = timeDiff(alt.depSched);
+          const diffColor = !diff ? "#94a3b8" : diff === "Same time" ? "#64748b" : diff.startsWith("+") ? "#ea580c" : "#16a34a";
+          const isOurFlight = (alt.flight || "").replace(/\s/g, "") === fk.replace(/\s/g, "");
+
           return (
-            <div key={alt.id} style={{ background:"#fff", border:"1px solid #e8e6de", borderRadius:12, padding:"14px 16px", position:"relative" }}>
-              {bs && <div style={{ position:"absolute", top:12, right:14, background:bs.bg, border:`1px solid ${bs.bc}`, borderRadius:20, padding:"2px 10px", fontSize:10, color:bs.c, fontWeight:600 }}>{alt.badge}</div>}
-              {alt.type === "nearby" && <div style={{ marginBottom:8, padding:"4px 8px", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:6, fontSize:11, color:"#1d4ed8", display:"inline-block" }}>Departs from {alt.altAirportName} ({alt.altAirport})</div>}
+            <div key={i} style={{
+              background: isOurFlight ? "#fffbeb" : "#fff",
+              border: `1px solid ${isOurFlight ? "#fde68a" : "#e8e6de"}`,
+              borderRadius:12, padding:"14px 16px", position:"relative",
+              opacity: isOurFlight ? 0.7 : 1,
+            }}>
+              {isOurFlight && (
+                <div style={{ position:"absolute", top:10, right:12, background:"#fef9c3", border:"1px solid #fde68a", borderRadius:20, padding:"2px 8px", fontSize:10, color:"#92400e", fontWeight:600 }}>
+                  Your flight
+                </div>
+              )}
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
-                <div style={{ display:"flex", gap:10, alignItems:"center", minWidth:130 }}>
-                  <div style={{ width:34, height:34, borderRadius:9, background:acolor(alt.airline), display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:atcolor(alt.airline), flexShrink:0 }}>{ai(alt.airline)}</div>
+                {/* Airline */}
+                <div style={{ display:"flex", gap:10, alignItems:"center", minWidth:140 }}>
+                  <div style={{ width:34, height:34, borderRadius:9, background:acolor(alt.airline), display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:atcolor(alt.airline), flexShrink:0 }}>
+                    {ai(alt.airline)}
+                  </div>
                   <div>
                     <div style={{ fontSize:12, fontWeight:600, color:"#1e293b" }}>{alt.airline}</div>
                     <div style={{ fontSize:11, color:"#94a3b8", fontFamily:"monospace" }}>{alt.flight}</div>
                   </div>
                 </div>
+
+                {/* Times */}
                 <div style={{ display:"flex", alignItems:"center", gap:10, flex:1, justifyContent:"center", minWidth:160 }}>
                   <div style={{ textAlign:"center" }}>
-                    <div style={{ fontSize:18, fontWeight:800, color:"#1e293b" }}>{alt.dep}</div>
-                    <div style={{ fontSize:10, color:"#94a3b8" }}>{alt.from}</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:"#1e293b" }}>{alt.depSched || "—"}</div>
+                    <div style={{ fontSize:10, color:"#94a3b8" }}>{fromIata}</div>
                   </div>
                   <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                    <span style={{ fontSize:10, color:alt.stops === 0 ? "#16a34a" : "#d97706", fontWeight:600, background:alt.stops === 0 ? "#f0fdf4" : "#fffbeb", padding:"1px 6px", borderRadius:10 }}>{alt.stops === 0 ? "Nonstop" : "1 Stop"}</span>
+                    {alt.durationMin && (
+                      <span style={{ fontSize:10, color:"#64748b" }}>
+                        {Math.floor(alt.durationMin/60)}h{alt.durationMin%60 > 0 ? `${alt.durationMin%60}m` : ""}
+                      </span>
+                    )}
                     <div style={{ width:"100%", height:1, background:"#e8e6de" }}/>
-                    {alt.via && <div style={{ fontSize:10, color:"#94a3b8" }}>via {alt.via}</div>}
+                    <span style={{ fontSize:10, color:"#16a34a", fontWeight:600, background:"#f0fdf4", padding:"1px 6px", borderRadius:10 }}>Nonstop</span>
                   </div>
                   <div style={{ textAlign:"center" }}>
-                    <div style={{ fontSize:18, fontWeight:800, color:"#1e293b" }}>{alt.arr}</div>
-                    <div style={{ fontSize:10, color:"#94a3b8" }}>{alt.to}</div>
+                    <div style={{ fontSize:18, fontWeight:800, color:"#1e293b" }}>{alt.arrSched || "—"}</div>
+                    <div style={{ fontSize:10, color:"#94a3b8" }}>{toIata}</div>
                   </div>
                 </div>
+
+                {/* Status */}
                 <div style={{ textAlign:"right", minWidth:80 }}>
-                  <div style={{ fontSize:21, fontWeight:800, color:"#c2820a" }}>${alt.price}</div>
-                  <div style={{ fontSize:10, color:"#94a3b8", marginBottom:5 }}>per person</div>
-                  <div style={{ fontSize:10, color:"#64748b", marginBottom:3 }}>Seats: <b style={{ color:sc }}>{alt.seats}</b></div>
-                  <div style={{ height:3, background:"#f1f5f9", borderRadius:2, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${Math.min(alt.seats / 20, 1) * 100}%`, background:sc, borderRadius:2 }}/>
-                  </div>
+                  <div style={{ fontSize:12, fontWeight:600, color:statusColor(alt.status) }}>{alt.status}</div>
+                  {alt.gate && <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>Gate {alt.gate}</div>}
+                  {alt.terminal && <div style={{ fontSize:10, color:"#94a3b8" }}>T{alt.terminal}</div>}
+                  {alt.aircraft && <div style={{ fontSize:10, color:"#94a3b8", marginTop:2 }}>{alt.aircraft}</div>}
                 </div>
               </div>
-              <div style={{ marginTop:10, paddingTop:9, borderTop:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", fontSize:11, color:"#94a3b8" }}>
-                <span>On-time: <b style={{ color:rc(1 - alt.onTimeRate) }}>{pct(alt.onTimeRate)}</b></span>
-                <span style={{ color:diff < 0 ? "#16a34a" : diff > 30 ? "#ea580c" : "#94a3b8" }}>{ds}</span>
+
+              {/* Footer */}
+              <div style={{ marginTop:10, paddingTop:8, borderTop:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", fontSize:11, color:"#94a3b8" }}>
+                <span>{alt.depDelay > 0 ? <span style={{ color:"#ea580c" }}>+{alt.depDelay}m delay</span> : <span style={{ color:"#16a34a" }}>On time</span>}</span>
+                {diff && <span style={{ color:diffColor, fontWeight:600 }}>{diff}</span>}
               </div>
             </div>
           );
         })}
       </div>
+
+      <div style={{ marginTop:12, padding:"8px 12px", background:"#f0fdf4", border:"1px solid #86efac", borderRadius:8, fontSize:11, color:"#15803d" }}>
+        ✓ Live departures from AeroDataBox · {fromIata} → {toIata}
+      </div>
     </div>
   );
 }
 
+
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [q, setQ]     = useState("");
-  const [sel, setSel] = useState(null);
-  const [page, setPage] = useState("live");
+  const [q, setQ]         = useState("");
+  const [sel, setSel]     = useState(null);
+  const [page, setPage]   = useState("live");
+  const [liveCache, setLiveCacheRaw] = useState({});
+  const cacheLive = (fk, data) => setLiveCacheRaw(prev => ({ ...prev, [fk]: data }));
 
   // Format input: max 2 letters then max 4 digits, no spaces
   const handleInput = e => {
@@ -1199,9 +1270,9 @@ export default function App() {
             </div>
             <div style={{ marginTop:20, fontSize:11, color:"#d1cfc7" }}>Try: AA100 · BA178 · EK201 · UA1</div>
           </div>
-        ) : page === "live"    ? <LivePage    key={sel + "l"} fk={sel}/>
+        ) : page === "live"    ? <LivePage    key={sel + "l"} fk={sel} onLiveData={d => cacheLive(sel, d)}/>
           : page === "history" ? <HistoryPage key={sel + "h"} fk={sel}/>
-          : <AltsPage key={sel + "a"} fk={sel} liveDelayMin={0} liveStatus={null}/>
+          : <AltsPage key={sel + "a"} fk={sel} liveData={liveCache[sel]} liveDelayMin={0} liveStatus={null}/>
         }
       </div>
     </div>
