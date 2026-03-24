@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     // Format as YYYY-MM-DDTHH:mm (local, no Z)
     const fmt = d => d.toISOString().slice(0, 16);
 
-    const url = `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${origin}/${fmt(from)}/${fmt(to)}?direction=Dep&withLeg=true&withCancelled=false&withCodeshared=false&withLocation=false`;
+    const url = `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${origin}/${fmt(from)}/${fmt(to)}?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withLocation=false`;
 
     const r = await fetch(url, { headers });
     const text = await r.text();
